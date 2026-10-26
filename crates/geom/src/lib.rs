@@ -14,11 +14,12 @@ mod intersect;
 mod mat;
 mod nurbs;
 pub mod region;
+pub mod solid;
 mod spline;
 mod spline_fit;
 mod vec;
 
-pub use bounds::Bounds2;
+pub use bounds::{Bounds2, Bounds3};
 pub use curve::{
     Arc, Circle, Ellipse, Line, PolyVertex, Polyline, Segment, arc_to_bulge, bulge_to_arc, point_in_polygon, polygon_centroid, shoelace,
 };

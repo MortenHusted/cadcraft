@@ -133,6 +133,65 @@ impl Mat4 {
             (m[2][0] * p.x + m[2][1] * p.y + m[2][2] * p.z + m[2][3]) / w,
         )
     }
+    /// The linear part applied to a direction (no translation, no projection).
+    pub fn apply_vec(&self, v: Vec3) -> Vec3 {
+        let m = &self.m;
+        Vec3::new(
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
+        )
+    }
+    /// Determinant of the linear part: negative for a transform that mirrors.
+    pub fn det3(&self) -> f64 {
+        let m = &self.m;
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    }
+    /// Apply `self` first, then `o`.
+    pub fn then(&self, o: &Mat4) -> Mat4 {
+        o.mul(self)
+    }
+    pub fn translate(v: Vec3) -> Mat4 {
+        Mat4 { m: [[1.0, 0.0, 0.0, v.x], [0.0, 1.0, 0.0, v.y], [0.0, 0.0, 1.0, v.z], [0.0, 0.0, 0.0, 1.0]] }
+    }
+    /// Uniform scale by `s` about `base`.
+    pub fn scale_about(base: Vec3, s: f64) -> Mat4 {
+        let t = base * (1.0 - s);
+        Mat4 { m: [[s, 0.0, 0.0, t.x], [0.0, s, 0.0, t.y], [0.0, 0.0, s, t.z], [0.0, 0.0, 0.0, 1.0]] }
+    }
+    /// Rotation by `angle` (right-handed, radians) about the axis through `origin` along `axis`;
+    /// the identity for a zero axis.
+    pub fn rotate_about_axis(origin: Vec3, axis: Vec3, angle: f64) -> Mat4 {
+        let k = axis.normalized();
+        if k == Vec3::ZERO {
+            return Mat4::IDENTITY;
+        }
+        let (s, c) = angle.sin_cos();
+        let t = 1.0 - c;
+        let r = [
+            [t * k.x * k.x + c, t * k.x * k.y - s * k.z, t * k.x * k.z + s * k.y],
+            [t * k.x * k.y + s * k.z, t * k.y * k.y + c, t * k.y * k.z - s * k.x],
+            [t * k.x * k.z - s * k.y, t * k.y * k.z + s * k.x, t * k.z * k.z + c],
+        ];
+        let lin =
+            Mat4 { m: [[r[0][0], r[0][1], r[0][2], 0.0], [r[1][0], r[1][1], r[1][2], 0.0], [r[2][0], r[2][1], r[2][2], 0.0], [0.0, 0.0, 0.0, 1.0]] };
+        Mat4::translate(-origin).then(&lin).then(&Mat4::translate(origin))
+    }
+    /// Reflection across the plane through `point` with normal `normal`; the identity for a zero
+    /// normal.
+    pub fn mirror_plane(point: Vec3, normal: Vec3) -> Mat4 {
+        let n = normal.normalized();
+        if n == Vec3::ZERO {
+            return Mat4::IDENTITY;
+        }
+        let d = point.dot(n);
+        let row = |a: f64, i: usize| -> [f64; 4] {
+            let e = |j: usize| if i == j { 1.0 } else { 0.0 };
+            [e(0) - 2.0 * a * n.x, e(1) - 2.0 * a * n.y, e(2) - 2.0 * a * n.z, 2.0 * a * d]
+        };
+        Mat4 { m: [row(n.x, 0), row(n.y, 1), row(n.z, 2), [0.0, 0.0, 0.0, 1.0]] }
+    }
     pub fn from_mat3(t: &Mat3) -> Mat4 {
         Mat4 { m: [[t.a, t.c, 0.0, t.e], [t.b, t.d, 0.0, t.f], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]] }
     }
