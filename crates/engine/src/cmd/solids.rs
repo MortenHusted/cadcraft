@@ -1,7 +1,7 @@
 //! 3D solid modeling: primitives (BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, PYRAMID), solids
 //! from profiles (EXTRUDE, REVOLVE, SWEEP, LOFT, POLYSOLID), placing solids in 3D (3DMOVE,
 //! 3DROTATE, MIRROR3D, 3DARRAY, 3DALIGN), rounding and bevelling edges (FILLETEDGE,
-//! CHAMFEREDGE), SLICE, INTERFERE, and output for 3D printing (STLOUT, 3DPRINT). UNION,
+//! CHAMFEREDGE), SOLIDEDIT's Shell, Separate and Check, SLICE, INTERFERE, and output for 3D printing (STLOUT, 3DPRINT). UNION,
 //! SUBTRACT, INTERSECT and MASSPROP (`inquiry::regions`) hand the 3D solids they are given to [`combine`] and
 //! [`massprop`].
 //!
@@ -23,13 +23,17 @@ mod edges;
 mod loft;
 mod output;
 mod place;
+mod solidedit;
 mod sweep;
 
 pub(crate) use output::massprop;
 pub(crate) use place::combine;
 
 pub fn specs() -> Vec<CommandSpec> {
-    [create::specs(), sweep::specs(), loft::specs(), place::specs(), edges::specs(), output::specs()].into_iter().flatten().collect()
+    [create::specs(), sweep::specs(), loft::specs(), place::specs(), edges::specs(), solidedit::specs(), output::specs()]
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 /// A 3D point: `[x, y, z]` or `[x, y]` (z = 0), or `{x, y, z?}`.
@@ -142,6 +146,14 @@ impl SelectAsk {
         if self.ask().is_some() {
             return Ok(Step::Continue);
         }
+        self.run(s)
+    }
+    /// The selection is made: ask on, or run the command when there is nothing to ask.
+    fn picked(&mut self, s: &mut Session, hs: Vec<Handle>) -> Result<Step> {
+        self.picked = Some(hs);
+        if self.ask().is_some() { Ok(Step::Continue) } else { self.run(s) }
+    }
+    fn run(&mut self, s: &mut Session) -> Result<Step> {
         let mut p = self.answers.clone();
         p.insert("handles".into(), self.picked.iter().flatten().map(|h| hex(*h)).collect());
         let spec = super::find_command(self.id).ok_or_else(|| EngineError::UnknownCommand(self.id.into()))?;
@@ -177,7 +189,7 @@ impl Interactive for SelectAsk {
     fn begin(&mut self, s: &mut Session) -> Result<Step> {
         self.sel = SelectPhase::begin(s);
         if self.sel.done {
-            self.picked = Some(self.sel.picked.clone());
+            return self.picked(s, self.sel.picked.clone());
         }
         Ok(Step::Continue)
     }
@@ -198,10 +210,7 @@ impl Interactive for SelectAsk {
             return match self.sel.feed(s, &i)? {
                 SelOutcome::More => Ok(Step::Continue),
                 SelOutcome::Empty => Ok(Step::Done),
-                SelOutcome::Done(hs) => {
-                    self.picked = Some(hs);
-                    Ok(Step::Continue)
-                }
+                SelOutcome::Done(hs) => self.picked(s, hs),
             };
         }
         let fail = |m: &str| Err(EngineError::Other(m.to_string()));

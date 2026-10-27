@@ -581,3 +581,51 @@ fn array_and_align_in_3d() {
         .to_string();
     assert!(e.contains("line up"), "{e}");
 }
+
+#[test]
+fn solidedit_shells_separates_and_checks() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 8, 6]})));
+    // A tray: walls of 1 with the top opened, its hollow 8 × 6 × 5.
+    let r = run(&mut s, "solidedit.shell", json!({"handles": [b], "thickness": 1, "remove": "top"}));
+    near(r["volumes"][0].as_f64().unwrap(), 480.0 - 240.0, 1e-9);
+    assert!(solid(&s, &b).mesh().check().is_closed());
+    // Opened through a side picked by a point on it instead: a sleeve along x.
+    let c = handle(&run(&mut s, "box", json!({"corner": [20, 0, 0], "opposite": [30, 8, 6]})));
+    let r = run(&mut s, "solidedit", json!({"mode": "shell", "handles": [c], "thickness": 1, "remove": [[20, 4, 3], [30, 4, 3]]}));
+    near(r["volumes"][0].as_f64().unwrap(), 480.0 - 10.0 * 6.0 * 4.0, 1e-9);
+    // Two solids united into one are separated again.
+    let d = handle(&run(&mut s, "box", json!({"corner": [50, 0, 0], "opposite": [51, 1, 1]})));
+    let e = handle(&run(&mut s, "box", json!({"corner": [60, 0, 0], "opposite": [62, 2, 2]})));
+    run(&mut s, "union", json!({"handles": [d, e]}));
+    let r = run(&mut s, "solidedit.check", json!({"handles": [d]}));
+    assert_eq!(r["solids"][0]["pieces"], 2);
+    assert_eq!(r["solids"][0]["closed"], true);
+    let r = run(&mut s, "solidedit.separate", json!({"handles": [d]}));
+    assert_eq!(r["handles"].as_array().unwrap().len(), 2);
+    assert_eq!(solids(&s).len(), 4);
+    for (p, why) in [
+        (json!({"mode": "explode", "handles": [b]}), "`mode`"),
+        (json!({"mode": "shell", "handles": [b]}), "`thickness`"),
+        (json!({"mode": "shell", "handles": [b], "thickness": 50}), "too thick"),
+        (json!({"mode": "shell", "handles": [b], "thickness": 0.1, "remove": [[500, 0, 0]]}), "no face"),
+    ] {
+        let err = s.execute("solidedit", &p).unwrap_err().to_string();
+        assert!(err.contains(why), "{p}: {err}");
+    }
+}
+
+#[test]
+fn solidedit_from_the_command_line() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 8, 6]})));
+    s.set_selection(Vec::new());
+    s.cmdline("solidedit").unwrap();
+    s.cmdline("shell").unwrap();
+    // A point on its outline in plan picks the box.
+    s.cmdline("0,4").unwrap();
+    s.cmdline("").unwrap();
+    s.cmdline("1").unwrap();
+    s.cmdline("top").unwrap();
+    near(solid(&s, &b).mass_props().volume, 240.0, 1e-9);
+}

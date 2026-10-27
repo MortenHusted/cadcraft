@@ -22,6 +22,7 @@ pub mod edges;
 mod merge;
 pub mod primitives;
 pub mod printability;
+pub mod shell;
 pub mod skin;
 mod stitch;
 pub mod sweep;

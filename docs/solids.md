@@ -97,6 +97,23 @@ corner. Round the vertical edges first and then the top rim, and the rim is one 
 The last line bevels the bottom rim, which keeps the first layers' squash (elephant's foot)
 from sticking out.
 
+## Shells, separate pieces and checks
+
+SOLIDEDIT's body options, each also its own menu item and command:
+
+| Command | JSON parameters |
+|---|---|
+| `solidedit.shell` (Modify › Solid Editing › Shell) | `{handles, thickness, remove?}`: hollows each solid to walls `thickness` thick; `remove` opens faces: `"top"`, `"bottom"` or points on faces (each picks the flat face nearest it) |
+| `solidedit.separate` | `{handles}`: splits a solid into its separate pieces, each hollow staying with the piece round it; the first piece keeps the handle |
+| `solidedit.check` | `{handles}`: whether each solid is closed, its open, non-manifold and flipped edges, and its pieces |
+| SOLIDEDIT | `{mode: "shell" \| "separate" \| "check", ...}`; typed, it asks for the option first |
+
+The hollow is the solid shrunk by the wall thickness: each corner moves to where its faces,
+each moved in by the thickness, meet (faces meeting at less than 25° count as one, so curved
+faces shrink along their normal), and the faces to open move out instead, so the hollow breaks
+through them. A box opened at the top becomes a tray, a lofted vase a vase you can print with
+walls; a wall too thick for the solid (its inside would fold over) is refused.
+
 ## Checking
 
 - MASSPROP reports volume (mass at unit density), area, bounding box, centroid, moments and
@@ -148,7 +165,7 @@ boxes, cylinders and spheres.
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
-meshes or SOLIDEDIT, and no STEP import. LOFT takes
+meshes or SOLIDEDIT face and edge editing, and no STEP import. LOFT takes
 cross-sections parallel to XY without holes, and no guides or path.
 FILLETEDGE has no variable radius and rounds only corners where three edges of one radius
 meet with a ball; other corners keep where the cuts cross. See F24 in [gaps.md](gaps.md).
