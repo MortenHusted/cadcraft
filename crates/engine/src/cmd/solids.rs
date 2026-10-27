@@ -1,5 +1,5 @@
 //! 3D solid modeling: primitives (BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS), solids from
-//! profiles (EXTRUDE, REVOLVE), placing solids in 3D (3DMOVE, 3DROTATE, MIRROR3D), rounding and
+//! profiles (EXTRUDE, REVOLVE, SWEEP, LOFT), placing solids in 3D (3DMOVE, 3DROTATE, MIRROR3D), rounding and
 //! bevelling edges (FILLETEDGE, CHAMFEREDGE), SLICE, INTERFERE, and output for 3D printing
 //! (STLOUT, 3DPRINT). UNION, SUBTRACT, INTERSECT and
 //! MASSPROP (`inquiry::regions`) hand the 3D solids they are given to [`combine`] and
@@ -20,6 +20,7 @@ use crate::{Accept, EngineError, Input, Interactive, Prompt, Result, Session, St
 
 mod create;
 mod edges;
+mod loft;
 mod output;
 mod place;
 mod sweep;
@@ -28,7 +29,7 @@ pub(crate) use output::massprop;
 pub(crate) use place::combine;
 
 pub fn specs() -> Vec<CommandSpec> {
-    [create::specs(), sweep::specs(), place::specs(), edges::specs(), output::specs()].into_iter().flatten().collect()
+    [create::specs(), sweep::specs(), loft::specs(), place::specs(), edges::specs(), output::specs()].into_iter().flatten().collect()
 }
 
 /// A 3D point: `[x, y, z]` or `[x, y]` (z = 0), or `{x, y, z?}`.

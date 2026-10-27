@@ -437,3 +437,77 @@ fn filletedge_from_the_command_line_picks_the_highest_edge_in_plan() {
     near(240.0 - so.mass_props().volume, (1.0 - PI / 4.0) * 0.25 * 10.0, 0.05 * (1.0 - PI / 4.0) * 0.25 * 10.0);
     assert!(so.bounds().max.z == 4.0 && so.mesh().vertices.iter().any(|v| v.z < 4.0 && v.z > 3.5 && v.y < 0.5 && v.y > 0.0));
 }
+
+#[test]
+fn sweep_carries_a_profile_along_a_path() {
+    let mut s = Session::new();
+    // A circle of radius 1 along an L of polyline (10 then 8): a bent rod, its volume the
+    // section's area times the centre line's length (the mitre adds and takes the same).
+    let c = handle(&run(&mut s, "circle", json!({"center": [50, 50], "radius": 1})));
+    let path = handle(&run(&mut s, "pline", json!({"points": [[0, 0], [10, 0], [10, 8]]})));
+    let r = run(&mut s, "sweep", json!({"handles": [c], "path": path}));
+    let rod = solid(&s, &handle(&r));
+    assert!(rod.mesh().check().is_closed());
+    // The first section is the cap across the path at x = 0.
+    let n = rod.mesh().vertices.iter().filter(|v| v.x.abs() < 1e-9).count() as f64;
+    let area = ngon(1.0, n);
+    near(rod.mass_props().volume, area * 18.0, 1e-6 * area * 18.0);
+    // The profile and path are erased; the rod starts at the path's start, across it.
+    assert_eq!(s.doc().unwrap().model.len(), 1);
+    let b = rod.bounds();
+    near(b.min.x, 0.0, 1e-9);
+    near(b.max.y, 8.0, 1e-9);
+    near(b.max.z, 1.0, 1e-3);
+    // A coil: a circle along a HELIX, kept.
+    let c = handle(&run(&mut s, "circle", json!({"center": [0, 0], "radius": 0.5})));
+    let h = handle(&run(&mut s, "helix", json!({"center": [0, 0], "baseRadius": 5, "height": 10, "turns": 4})));
+    let r = run(&mut s, "sweep", json!({"handles": [c], "path": h, "keep": true}));
+    let coil = solid(&s, &handle(&r));
+    assert!(coil.mesh().check().is_closed());
+    let b = coil.bounds();
+    near(b.max.z - b.min.z, 11.0, 0.05);
+    assert!(s.doc().unwrap().entity(Handle::parse_hex(&h).unwrap()).is_some());
+    // Inline points, twisted: a square bar twisted a quarter turn.
+    let sq = handle(&run(&mut s, "rectang", json!({"p1": [-1, -1], "p2": [1, 1]})));
+    let r = run(&mut s, "sweep", json!({"handles": [sq], "path": [[0, 0, 0], [0, 0, 10]], "twist": 90}));
+    let bar = solid(&s, &handle(&r));
+    assert!(bar.mesh().check().is_closed());
+    near(bar.mass_props().volume, 40.0, 0.01 * 40.0);
+    let t = handle(&run(&mut s, "text", json!({"at": [0, 0], "text": "x", "height": 1})));
+    let sq = handle(&run(&mut s, "rectang", json!({"p1": [-1, -1], "p2": [1, 1]})));
+    let e = s.execute("sweep", &json!({"handles": [sq], "path": t})).unwrap_err().to_string();
+    assert!(e.contains("not a path"), "{e}");
+    let e = s.execute("sweep", &json!({"handles": [sq]})).unwrap_err().to_string();
+    assert!(e.contains("`path`"), "{e}");
+}
+
+#[test]
+fn loft_joins_cross_sections_and_3dmove_raises_them() {
+    let mut s = Session::new();
+    let sq = handle(&run(&mut s, "rectang", json!({"p1": [-2, -2], "p2": [2, 2]})));
+    let c = handle(&run(&mut s, "circle", json!({"center": [0, 0], "radius": 1.5})));
+    // 3DMOVE lifts the circle to z = 6.
+    run(&mut s, "3dmove", json!({"handles": [c], "displacement": [0, 0, 6]}));
+    match &s.doc().unwrap().entity(Handle::parse_hex(&c).unwrap()).unwrap().kind {
+        EntityKind::Circle(ci) => near(ci.center.z, 6.0, 1e-12),
+        k => panic!("{}", k.type_name()),
+    }
+    let r = run(&mut s, "loft", json!({"handles": [sq, c], "ruled": true}));
+    let m = solid(&s, &handle(&r));
+    assert!(m.mesh().check().is_closed());
+    let v = m.mass_props().volume;
+    assert!(v < 16.0 * 6.0 && v > PI * 1.5 * 1.5 * 6.0 * 0.95, "{v}");
+    assert_eq!(s.doc().unwrap().model.len(), 1);
+    // To a point: a cone, a third of its base times its height.
+    let base = handle(&run(&mut s, "circle", json!({"center": [20, 0], "radius": 3})));
+    let tip = run(&mut s, "point", json!({"at": [20, 0]}))["handles"][0].as_str().unwrap().to_string();
+    run(&mut s, "3dmove", json!({"handles": [tip], "displacement": [0, 0, 9]}));
+    let r = run(&mut s, "loft", json!({"handles": [base, tip]}));
+    let cone = solid(&s, &handle(&r));
+    assert!(cone.mesh().check().is_closed());
+    let n = cone.mesh().vertices.iter().filter(|p| p.z.abs() < 1e-9).count() as f64;
+    near(cone.mass_props().volume, ngon(3.0, n) * 3.0, 1e-6 * ngon(3.0, n) * 3.0);
+    let one = handle(&run(&mut s, "circle", json!({"center": [0, 0], "radius": 1})));
+    let e = s.execute("loft", &json!({"handles": [one]})).unwrap_err().to_string();
+    assert!(e.contains("at least two"), "{e}");
+}

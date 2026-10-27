@@ -30,13 +30,13 @@ pub fn specs() -> Vec<CommandSpec> {
 }
 
 /// A closed profile: its loops (outer and holes) at height `z`.
-struct Profile {
-    loops: Vec<Vec<Vec2>>,
-    z: f64,
+pub(super) struct Profile {
+    pub(super) loops: Vec<Vec<Vec2>>,
+    pub(super) z: f64,
 }
 
 /// The profile of `e`, or why it has none.
-fn profile(d: &Drawing, e: &Entity) -> std::result::Result<Profile, &'static str> {
+pub(super) fn profile(d: &Drawing, e: &Entity) -> std::result::Result<Profile, &'static str> {
     let n = e.common.extrusion;
     if n.x.abs() > 1e-9 || n.y.abs() > 1e-9 || n.z <= 0.0 {
         return Err("not in a plane parallel to XY");

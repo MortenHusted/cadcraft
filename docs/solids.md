@@ -23,9 +23,25 @@ dialog. JSON points are `[x, y, z]` (a missing z is 0).
 | TORUS | `{center, radius \| diameter, tubeRadius \| tubeDiameter, segments?}` (`radius` to the tube's center) |
 | EXTRUDE | `{handles, height \| direction, keep?}`: circles, full ellipses, closed polylines (fillets and arcs too), closed splines and planar 3D polylines become solids; a region's islands become holes; TEXT in a TrueType font becomes solid lettering (counters as holes), to emboss with UNION or engrave with SUBTRACT |
 | REVOLVE | `{handles, axis: [[x,y],[x,y]], angle? (360)}` about an axis in the profiles' plane |
+| SWEEP | `{handles, path, twist? (degrees), scale? (1), base?, keep?}`: each profile carried along `path`, a line, arc, circle, ellipse, polyline, 3D polyline, spline or helix (its handle) or a list of points. The profile stands across the path at its start, its centroid (or `base`) on the path, its Y up and its X to the left looking along the path, and turns as little as it can along it; corners are mitred. `twist` turns it and `scale` grows or shrinks it from start to end |
+| LOFT | `{handles, ruled?, keep?}`: a solid through closed cross-sections in the order given, each in a plane parallel to XY (raise them with 3DMOVE); a POINT may come first or last (a tip). Smooth through the sections by default, straight between them with `ruled` |
 
-Like AutoCAD with DELOBJ at its default, EXTRUDE and REVOLVE erase the profiles unless `keep`
-is true; each solid takes its profile's layer and properties.
+Like AutoCAD with DELOBJ at its default, EXTRUDE, REVOLVE, SWEEP and LOFT erase what made the
+solid (profiles, path, cross-sections) unless `keep` is true; each solid takes its profile's
+layer and properties.
+
+A thread is a SWEEP of its tooth along a HELIX, united with the core. Along a
+counter-clockwise helix the profile's X points at the axis, so the tooth's tip is at -X; `base`
+puts the profile's origin (not its centroid) on the helix, so the tooth reaches from 0.6 inside
+it to 0.6 outside, its root well inside the core:
+
+```json
+{"command": "helix", "params": {"center": [0, 0], "baseRadius": 4.2, "height": 18, "turns": 12}}
+{"command": "pline", "params": {"points": [[0.6, -0.7], [0.6, 0.7], [-0.6, 0]], "closed": true}}
+{"command": "sweep", "params": {"handles": ["<tooth>"], "path": "<helix>", "base": [0, 0]}}
+{"command": "cylinder", "params": {"center": [0, 0, 0], "radius": 3.8, "height": 18}}
+{"command": "union", "params": {"handles": ["<core>", "<thread>"]}}
+```
 
 ## Combining and placing
 
@@ -41,7 +57,8 @@ is true; each solid takes its profile's layer and properties.
 The booleans return `closed`: whether the result is one watertight solid. It is false only
 where solids touch along an edge or at a point, which no closed mesh can represent. MOVE,
 ROTATE, SCALE and MIRROR also work on solids in plan; 3DMOVE, 3DROTATE and MIRROR3D move other
-objects only when the transform keeps them in plan.
+objects only when the transform keeps them in plan, and 3DMOVE raises or lowers those that have
+a height of their own (lines, circles, arcs, polylines, text, points…).
 
 ## Rounding and bevelling edges
 
@@ -127,6 +144,7 @@ boxes, cylinders and spheres.
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
-meshes, PYRAMID, POLYSOLID, SWEEP, LOFT, SOLIDEDIT, 3DALIGN or 3DARRAY, and no STEP import.
+meshes, PYRAMID, POLYSOLID, SOLIDEDIT, 3DALIGN or 3DARRAY, and no STEP import. LOFT takes
+cross-sections parallel to XY without holes, and no guides or path.
 FILLETEDGE has no variable radius and rounds only corners where three edges of one radius
 meet with a ball; other corners keep where the cuts cross. See F24 in [gaps.md](gaps.md).

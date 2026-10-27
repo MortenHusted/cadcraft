@@ -234,7 +234,7 @@ pub fn torus(center: Vec3, radius: f64, tube: f64, segments: usize) -> Result<Me
 }
 
 /// Closed loops cleaned of repeated points, each with at least three points and some area.
-fn clean_loops(loops: &[Vec<Vec2>]) -> Result<Vec<Vec<Vec2>>, SolidError> {
+pub(crate) fn clean_loops(loops: &[Vec<Vec2>]) -> Result<Vec<Vec<Vec2>>, SolidError> {
     let total: usize = loops.iter().map(Vec::len).sum();
     if total > MAX_PROFILE_POINTS {
         return Err(SolidError::TooComplex);

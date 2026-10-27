@@ -24,6 +24,7 @@ pub mod primitives;
 pub mod printability;
 pub mod skin;
 mod stitch;
+pub mod sweep;
 mod triangulate;
 
 pub use boolean::{BoolOp, boolean};

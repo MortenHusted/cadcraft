@@ -130,8 +130,22 @@ pub fn skin(sections: &[Section], closed: bool) -> Result<Mesh, SolidError> {
         let next = (k + 1) % sections.len();
         for (j, n) in counts.iter().enumerate() {
             for i in 0..*n {
-                tri(&mut m, at(k, j, i), at(k, j, i + 1), at(next, j, i + 1));
-                tri(&mut m, at(k, j, i), at(next, j, i + 1), at(next, j, i));
+                let q = [at(k, j, i), at(k, j, i + 1), at(next, j, i + 1), at(next, j, i)];
+                let p = q.map(|v| m.vertices.get(v as usize).copied().unwrap_or(Vec3::ZERO));
+                // A twisted quad (a twisted or curving skin) is split from its centre, so it
+                // stays true to the ruled surface whichever way it twists; a flat one in two.
+                let normal = (p[1] - p[0]).cross(p[2] - p[0]).normalized();
+                let twist = normal.dot(p[3] - p[0]).abs();
+                if twist > 1e-4 * p[0].dist(p[2]).max(p[1].dist(p[3])) && q[0] != q[1] && q[2] != q[3] {
+                    let c = u32::try_from(m.vertices.len()).map_err(|_| SolidError::TooComplex)?;
+                    m.vertices.push((p[0] + p[1] + p[2] + p[3]) * 0.25);
+                    for e in 0..4 {
+                        tri(&mut m, c, q[e], q[(e + 1) % 4]);
+                    }
+                } else {
+                    tri(&mut m, q[0], q[1], q[2]);
+                    tri(&mut m, q[0], q[2], q[3]);
+                }
             }
         }
     }
