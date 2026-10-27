@@ -201,6 +201,16 @@ fn slice_cuts_a_solid_in_two() {
 }
 
 #[test]
+fn a_solid_named_twice_is_sliced_once() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [2, 2, 2]})));
+    let r = run(&mut s, "slice", json!({"handles": [b.clone(), b], "plane": "xy", "point": [0, 0, 1]}));
+    assert_eq!(r["handles"].as_array().unwrap().len(), 2);
+    assert_eq!(solids(&s).len(), 2);
+    near(solids(&s).iter().map(|p| p.mass_props().volume).sum(), 8.0, 1e-9);
+}
+
+#[test]
 fn interfere_finds_overlapping_solids() {
     let mut s = Session::new();
     let a = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "length": 10})));

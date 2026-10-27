@@ -82,11 +82,14 @@ pub(crate) fn add_solid(s: &mut Session, mesh: Mesh) -> Result<Handle> {
     s.add_entity(EntityKind::Solid3d(Solid3d::new(mesh)))
 }
 
-/// The 3D solids among `hs`, with their handles (other objects are left out).
+/// The 3D solids among `hs`, with their handles, each once in the order first named (other
+/// objects are left out).
 pub(crate) fn solids_in(s: &Session, hs: &[Handle]) -> Result<Vec<(Handle, Solid3d)>> {
     let d = s.doc()?;
+    let mut seen = std::collections::HashSet::new();
     Ok(hs
         .iter()
+        .filter(|h| seen.insert(**h))
         .filter_map(|h| match &d.entity(*h)?.kind {
             EntityKind::Solid3d(so) => Some((*h, so.clone())),
             _ => None,
