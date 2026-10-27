@@ -16,6 +16,7 @@ mod dxf_xref;
 pub mod pdf;
 pub mod plotter;
 pub mod print3d;
+pub mod step;
 pub mod stl_read;
 pub mod svg;
 mod svg_read;
@@ -56,6 +57,11 @@ pub enum IoError {
 }
 
 pub type Result<T> = std::result::Result<T, IoError>;
+
+/// The file's name without folders or extension, for formats that name what they hold.
+fn product_name(name: &str) -> String {
+    std::path::Path::new(name).file_stem().map_or_else(|| "part".to_string(), |s| s.to_string_lossy().to_string())
+}
 
 fn ext(name: &str) -> String {
     std::path::Path::new(name).extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default()
@@ -134,6 +140,7 @@ pub fn write_framed(d: &Drawing, name: &str, window: Option<Bounds2>) -> Result<
         "pdf" => pdf::pdf(d, &Space::Model, &PdfOptions { compress: true, window, ..PdfOptions::default() }),
         "stl" => print3d::stl(&print3d::solids(d, &Space::Model)),
         "3mf" => print3d::three_mf(&print3d::solids(d, &Space::Model), print3d::unit_name(d)),
+        "step" | "stp" => step::step(&print3d::solids(d, &Space::Model), step::millimetres_per_unit(d), &product_name(name)),
         e => Err(IoError::Unsupported(e.to_string())),
     }
 }

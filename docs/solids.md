@@ -145,6 +145,11 @@ walls; a wall too thick for the solid (its inside would fold over) is refused.
   for each mesh on its build plate, placed where the file puts it and in its units, so a part
   from elsewhere can be combined with new geometry and printed again. Support objects in a 3MF
   are left out.
+- **STEP.** EXPORT, SAVEAS and the CLI's `--export part.step` (or `.stp`) write model space's
+  solids as STEP (AP214) B-reps, in millimetres: each solid a closed shell of flat faces (its
+  triangles merged where they share a plane, so a box has six faces) with shared straight edges,
+  which CAD programs such as Fusion, Onshape, FreeCAD and SolidWorks open as solids; curved
+  surfaces arrive faceted.
 - **DXF and DWG.** A solid is saved as a polyface mesh (POLYLINE flag 64; edges between faces
   that meet smoothly are hidden), the closest object an R2000 DXF has: other programs show its
   surface, and CADCraft xdata makes it a solid again when CADCraft opens the file. A solid with
@@ -165,7 +170,8 @@ boxes, cylinders and spheres.
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
-meshes or SOLIDEDIT face and edge editing, and no STEP import. LOFT takes
+meshes or SOLIDEDIT face and edge editing, and no STEP import (STEP export writes faceted
+solids, not curved surfaces). LOFT takes
 cross-sections parallel to XY without holes, and no guides or path.
 FILLETEDGE has no variable radius and rounds only corners where three edges of one radius
 meet with a ball; other corners keep where the cuts cross. See F24 in [gaps.md](gaps.md).

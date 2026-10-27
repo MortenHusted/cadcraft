@@ -23,7 +23,7 @@ use super::{CommandSpec, bad, point_value, str_param};
 use crate::{EngineError, Result, Session};
 
 /// Formats EXPORT writes (the io layer picks the writer from the extension).
-pub const EXPORT_FORMATS: &[&str] = &["dxf", "dwg", "svg", "png", "pdf", "stl", "3mf"];
+pub const EXPORT_FORMATS: &[&str] = &["dxf", "dwg", "svg", "png", "pdf", "stl", "3mf", "step", "stp"];
 /// Default and largest plot preview width, in pixels.
 const PREVIEW_PX: u64 = 1200;
 const MAX_PREVIEW_PX: u64 = 4096;
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("export", "Export...", run_export)
             .menu(&["File", "Export..."])
             .alias(&["exp"])
-            .params("{path? (else returns base64 `data`), format?: dxf|dwg|svg|png|pdf|stl|3mf (default: the path's extension; stl and 3mf hold model space's 3D solids)} → {format, bytes, path? | data}")
+            .params("{path? (else returns base64 `data`), format?: dxf|dwg|svg|png|pdf|stl|3mf|step (default: the path's extension; stl, 3mf and step hold model space's 3D solids)} → {format, bytes, path? | data}")
             .noundo(),
         CommandSpec::new("preview", "Plot Preview", run_preview)
             .menu(&["File", "Plot Preview"])
@@ -115,9 +115,16 @@ fn run_export(s: &mut Session, p: &Value) -> Result<Value> {
         None => path.map(extension).unwrap_or_default(),
     };
     if !EXPORT_FORMATS.contains(&format.as_str()) {
-        return Err(bad("export", "`format` must be dxf, dwg, svg, png, pdf, stl or 3mf (or give a `path` with one of those extensions)"));
+        return Err(bad("export", "`format` must be dxf, dwg, svg, png, pdf, stl, 3mf or step (or give a `path` with one of those extensions)"));
     }
-    let bytes = (hooks.write)(s.doc()?, &format!("export.{format}")).map_err(|e| bad("export", e))?;
+    // The writer takes the format from the name's extension; STEP also names its product after
+    // the file.
+    let stem = path.and_then(|p| std::path::Path::new(p).file_stem()).map(|s| s.to_string_lossy().to_string()).filter(|s| !s.is_empty());
+    let name = match stem {
+        Some(stem) if format == "step" || format == "stp" => format!("{stem}.{format}"),
+        _ => format!("export.{format}"),
+    };
+    let bytes = (hooks.write)(s.doc()?, &name).map_err(|e| bad("export", e))?;
     match path {
         Some(path) => {
             write_file("export", path, &bytes)?;
