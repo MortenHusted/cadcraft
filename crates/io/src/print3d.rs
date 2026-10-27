@@ -16,13 +16,15 @@ pub struct PrintObject<'a> {
     pub mesh: &'a Mesh,
 }
 
-/// The 3D solids in `space`, named after their layer and handle.
+/// The 3D solids in `space` that have any triangles, named after their layer and handle.
 pub fn solids<'a>(d: &'a Drawing, space: &Space) -> Vec<PrintObject<'a>> {
     d.space(space)
         .into_iter()
         .flat_map(|s| s.iter())
         .filter_map(|e| match &e.kind {
-            EntityKind::Solid3d(s) => Some(PrintObject { name: format!("{} {}", e.common.layer, e.handle.hex()), mesh: s.mesh() }),
+            EntityKind::Solid3d(s) if !s.mesh().is_empty() => {
+                Some(PrintObject { name: format!("{} {}", e.common.layer, e.handle.hex()), mesh: s.mesh() })
+            }
             _ => None,
         })
         .collect()
@@ -191,6 +193,17 @@ mod tests {
     use super::*;
     use cadcraft_geom::Vec3;
     use cadcraft_geom::solid::primitives::cuboid;
+
+    #[test]
+    fn empty_solids_are_left_out() {
+        let mut d = Drawing::new_metric();
+        let empty = cadcraft_doc::Solid3d::new(cadcraft_geom::solid::Mesh::default());
+        d.add(&Space::Model, cadcraft_doc::Common::default(), EntityKind::Solid3d(empty)).unwrap();
+        assert!(solids(&d, &Space::Model).is_empty());
+        let b = cadcraft_doc::Solid3d::new(cuboid(Vec3::ZERO, Vec3::new(1.0, 1.0, 1.0)).unwrap());
+        d.add(&Space::Model, cadcraft_doc::Common::default(), EntityKind::Solid3d(b)).unwrap();
+        assert_eq!(solids(&d, &Space::Model).len(), 1);
+    }
 
     #[test]
     fn crc32_check_value() {

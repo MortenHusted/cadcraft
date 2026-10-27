@@ -139,7 +139,7 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         "ui_inspect" => b.call("ui.inspect", json!({})),
         "ui_click" => b.call("ui.pointer", a),
         // A view asks for the shaded 3D picture of the solids (the RENDER command).
-        "render" if a.get("view").is_some() => {
+        "render" if a.get("view").is_some_and(|v| !v.is_null()) => {
             let params = json!({"view": a.get("view"), "width": a.get("width"), "height": a.get("height"), "path": a.get("path")});
             return Ok(match b.call("engine.execute", json!({"command": "render", "params": params})) {
                 Ok(v) => match v.get("data").and_then(Value::as_str) {

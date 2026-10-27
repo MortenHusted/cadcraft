@@ -166,13 +166,21 @@ fn fold(s: &mut Session, hs: &[Handle], op: Op) -> Result<Value> {
 }
 
 /// The solids among `hs` combined by `op` (`solids::combine`), then the regions among them by
-/// `region_op`; the solids' result when there were solids.
+/// `region_op`; the solids' result when there were solids. If the regions can't be combined,
+/// the solids are left as they were too.
 fn solids_then_regions(s: &mut Session, cmd: &str, hs: &[Handle], op: BoolOp, region_op: Op) -> Result<Value> {
-    let solid = super::super::solids::combine(s, cmd, hs, &[], op)?;
-    match solid {
+    let before = s.doc()?.clone();
+    match super::super::solids::combine(s, cmd, hs, &[], op)? {
         Some(v) if regions(s, hs)?.is_empty() => Ok(v),
-        Some(v) => fold(s, hs, region_op).map(|_| v),
+        Some(v) => fold(s, hs, region_op).map(|_| v).inspect_err(|_| restore(s, before)),
         None => fold(s, hs, region_op),
+    }
+}
+
+/// Put the drawing back as it was before a command that is failing changed it.
+fn restore(s: &mut Session, before: cadcraft_doc::Drawing) {
+    if let Ok(d) = s.doc_mut() {
+        *d = before;
     }
 }
 
@@ -192,11 +200,12 @@ fn handles(p: &Value, key: &str) -> Result<Vec<Handle>> {
 }
 
 fn subtract(s: &mut Session, from: &[Handle], remove: &[Handle]) -> Result<Value> {
+    let before = s.doc()?.clone();
     if let Some(v) = super::super::solids::combine(s, "subtract", from, remove, BoolOp::Difference)? {
         if regions(s, from)?.is_empty() {
             return Ok(v);
         }
-        return subtract_regions(s, from, remove).map(|_| v);
+        return subtract_regions(s, from, remove).map(|_| v).inspect_err(|_| restore(s, before));
     }
     subtract_regions(s, from, remove)
 }

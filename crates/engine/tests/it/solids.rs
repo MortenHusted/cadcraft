@@ -270,3 +270,31 @@ fn hostile_solid_params_never_panic() {
         }
     }
 }
+
+#[test]
+fn a_move_out_of_range_leaves_the_solid_where_it_is() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "length": 10})));
+    let r = run(&mut s, "3dmove", json!({"handles": [b], "displacement": [1e300, 0, 0]}));
+    assert_eq!((r["moved"].as_u64(), r["skipped"].as_u64()), (Some(0), Some(1)));
+    near(solid(&s, &b).mass_props().volume, 1000.0, 1e-9);
+    s.execute("move", &json!({"handles": [b], "from": [0, 0], "to": [1e300, 0]})).ok();
+    near(solid(&s, &b).bounds().min.x, 0.0, 0.0);
+}
+
+#[test]
+fn a_mixed_boolean_whose_regions_fail_changes_nothing() {
+    let mut s = Session::new();
+    let a = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "length": 10})));
+    let b = handle(&run(&mut s, "box", json!({"corner": [5, 0, 0], "length": 10})));
+    // Two regions whose boundaries cross: combining them is not available yet.
+    let mut regions = Vec::new();
+    for (p1, p2) in [([100, 0], [110, 10]), ([105, 5], [115, 15])] {
+        let r = handle(&run(&mut s, "rectang", json!({"p1": p1, "p2": p2})));
+        run(&mut s, "region", json!({"handles": [r]}));
+        regions.push(s.doc().unwrap().model.iter().last().unwrap().handle.hex());
+    }
+    let all: Vec<String> = [a, b].into_iter().chain(regions).collect();
+    assert!(s.execute("union", &json!({"handles": all})).is_err());
+    assert_eq!(solids(&s).len(), 2, "the solids are not united either");
+}

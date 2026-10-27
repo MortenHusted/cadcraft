@@ -12,8 +12,8 @@ use tiny_skia::{IntSize, Pixmap};
 
 /// Samples per pixel along each axis.
 const SUPERSAMPLE: u32 = 2;
-/// Largest picture side, in pixels.
-pub const MAX_SIDE: u32 = 4096;
+/// Largest picture side, in pixels: at most 4096 × 4096 samples, about 117 MB while drawing.
+pub const MAX_SIDE: u32 = 2048;
 
 /// One solid to draw and its colour.
 pub struct ShadeItem<'a> {
@@ -71,12 +71,12 @@ impl Camera {
 struct Canvas {
     w: usize,
     h: usize,
-    color: Vec<[f32; 3]>,
+    color: Vec<[u8; 3]>,
     depth: Vec<f32>,
 }
 
 impl Canvas {
-    fn set(&mut self, x: usize, y: usize, z: f32, c: [f32; 3], bias: f32) {
+    fn set(&mut self, x: usize, y: usize, z: f32, c: [u8; 3], bias: f32) {
         if x >= self.w || y >= self.h {
             return;
         }
@@ -90,12 +90,12 @@ impl Canvas {
     }
 }
 
-fn rgb_f(c: Rgb) -> [f32; 3] {
-    [f32::from(c.0), f32::from(c.1), f32::from(c.2)]
+fn rgb(c: Rgb) -> [u8; 3] {
+    [c.0, c.1, c.2]
 }
 
 /// Fill triangle `a b c` (screen x, y, depth) with `c` through the depth buffer.
-fn fill(cv: &mut Canvas, [a, b, c]: [Vec3; 3], color: [f32; 3]) {
+fn fill(cv: &mut Canvas, [a, b, c]: [Vec3; 3], color: [u8; 3]) {
     let area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
     if area.abs() < 1e-12 {
         return;
@@ -128,7 +128,7 @@ fn fill(cv: &mut Canvas, [a, b, c]: [Vec3; 3], color: [f32; 3]) {
 
 /// Draw a line `a`–`b` (screen x, y, depth) `width` samples wide where it is not behind a face
 /// by more than `bias`.
-fn line(cv: &mut Canvas, a: Vec3, b: Vec3, width: f64, color: [f32; 3], bias: f32) {
+fn line(cv: &mut Canvas, a: Vec3, b: Vec3, width: f64, color: [u8; 3], bias: f32) {
     let len = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
     let steps = (len.ceil() as usize).clamp(1, 1 << 16);
     let r = (width / 2.0).max(0.5);
@@ -165,7 +165,7 @@ pub fn shade(items: &[ShadeItem], o: &ShadeOptions) -> Option<Pixmap> {
         }
     }
     let (w, h) = ((out_w * SUPERSAMPLE) as usize, (out_h * SUPERSAMPLE) as usize);
-    let mut cv = Canvas { w, h, color: vec![rgb_f(o.background); w * h], depth: vec![f32::NEG_INFINITY; w * h] };
+    let mut cv = Canvas { w, h, color: vec![rgb(o.background); w * h], depth: vec![f32::NEG_INFINITY; w * h] };
     if lo.x.is_finite() && hi.x.is_finite() {
         let margin = 0.06;
         let (bw, bh) = ((hi.x - lo.x).max(1e-9), (hi.y - lo.y).max(1e-9));
@@ -178,7 +178,7 @@ pub fn shade(items: &[ShadeItem], o: &ShadeOptions) -> Option<Pixmap> {
         // A key light from above left of the viewer, and some light from everywhere.
         let light = (cam.back + cam.up * 0.6 - cam.right * 0.4).normalized();
         for it in items {
-            let base = rgb_f(it.color);
+            let base = rgb(it.color);
             for [a, b, c] in it.mesh.triangle_points() {
                 let n = (b - a).cross(c - a).normalized();
                 let facing = n.dot(cam.back);
@@ -186,12 +186,12 @@ pub fn shade(items: &[ShadeItem], o: &ShadeOptions) -> Option<Pixmap> {
                     continue;
                 }
                 let k = (0.32 + 0.68 * n.dot(light).max(0.0)) as f32;
-                fill(&mut cv, [screen(a), screen(b), screen(c)], base.map(|v| (v * k).min(255.0)));
+                fill(&mut cv, [screen(a), screen(b), screen(c)], base.map(|v| (f32::from(v) * k).round().clamp(0.0, 255.0) as u8));
             }
         }
         if o.edges {
             let bias = ((hi.z - lo.z).abs() * 2e-3).max(1e-9) as f32;
-            let ec = rgb_f(o.edge_color);
+            let ec = rgb(o.edge_color);
             for it in items {
                 for [a, b] in it.mesh.wire_edges(FEATURE_ANGLE, cam.back) {
                     line(&mut cv, screen(a), screen(b), 1.3 * f64::from(SUPERSAMPLE), ec, bias);
@@ -204,16 +204,16 @@ pub fn shade(items: &[ShadeItem], o: &ShadeOptions) -> Option<Pixmap> {
     let s = SUPERSAMPLE as usize;
     for y in 0..out_h as usize {
         for x in 0..out_w as usize {
-            let mut sum = [0.0f32; 3];
+            let mut sum = [0u32; 3];
             for dy in 0..s {
                 for dx in 0..s {
                     if let Some(px) = cv.color.get((y * s + dy) * w + x * s + dx) {
-                        sum.iter_mut().zip(px).for_each(|(a, b)| *a += b);
+                        sum.iter_mut().zip(px).for_each(|(a, b)| *a += u32::from(*b));
                     }
                 }
             }
-            let n = (s * s) as f32;
-            data.extend(sum.map(|v| (v / n).round().clamp(0.0, 255.0) as u8));
+            let n = (s * s) as u32;
+            data.extend(sum.map(|v| ((v + n / 2) / n).min(255) as u8));
             data.push(255);
         }
     }
@@ -256,6 +256,7 @@ mod tests {
     #[test]
     fn empty_and_huge_requests_are_safe() {
         let o = ShadeOptions { width: 0, height: 100_000, ..ShadeOptions::default() };
+        // Clamped to 1 × MAX_SIDE.
         let px = shade(&[], &o).unwrap();
         assert_eq!((px.width(), px.height()), (1, MAX_SIDE));
     }

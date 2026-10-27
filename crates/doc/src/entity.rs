@@ -437,7 +437,10 @@ impl EntityKind {
             }
             EntityKind::Solid(so) | EntityKind::Trace(so) => so.corners.iter_mut().for_each(t3),
             EntityKind::Face3d(f) => f.corners.iter_mut().for_each(t3),
-            EntityKind::Solid3d(so) => so.transform_2d(m),
+            EntityKind::Solid3d(so) => {
+                // Out of range, the solid stays where it is.
+                so.transform_2d(m);
+            }
             EntityKind::Region(r) => {
                 for v in r.loops.iter_mut().flat_map(|l| l.vertices.iter_mut()) {
                     v.p = m.apply(v.p);

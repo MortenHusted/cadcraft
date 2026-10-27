@@ -2,8 +2,10 @@
 
 > **Last reviewed:** 2026-10-27 · **Last updated:** 2026-10-27 · **Change:** major (first version) · **Target:** Autodesk AutoCAD 2027
 
-CADCraft models 3D solids for parts you print or machine. A 3D solid (3DSOLID) is a closed
-triangle mesh (`crates/geom/src/solid`): planar faces are exact, curved faces are faceted when
+CADCraft models 3D solids for parts you print or machine. A 3D solid (3DSOLID) holds a
+triangle mesh (`crates/geom/src/solid`) meant to be closed; a boolean whose solids touch only
+along an edge or at a point gives an open one, and says so (`closed: false`). Planar faces are
+exact, curved faces are faceted when
 the solid is made (at most 0.01 drawing units from the true surface, with 24 to 720 facets
 around a circle; the primitives take `segments` to choose). Every command below is an ordinary
 command: the command line, scripts, the CLI and MCP reach it, and the JSON form never opens a
@@ -18,7 +20,7 @@ dialog. JSON points are `[x, y, z]` (a missing z is 0).
 | CYLINDER | `{center, radius \| diameter, height, segments?}` (`center` of the base; a negative height builds downward) |
 | CONE | `{center, radius \| diameter, topRadius?, height, segments?}` (a frustum when `topRadius` > 0) |
 | SPHERE | `{center, radius \| diameter, segments?}` |
-| TORUS | `{center, radius \| diameter, tubeRadius \| tubeDiameter, segments?}` |
+| TORUS | `{center, radius \| diameter, tubeRadius \| tubeDiameter, segments?}` (`radius` to the tube's center) |
 | EXTRUDE | `{handles, height \| direction, keep?}`: circles, full ellipses, closed polylines (fillets and arcs too), closed splines and planar 3D polylines become solids; a region's islands become holes |
 | REVOLVE | `{handles, axis: [[x,y],[x,y]], angle? (360)}` about an axis in the profiles' plane |
 
@@ -48,14 +50,15 @@ objects only when the transform keeps them in plan.
 - INTERFERE `{first, second?, create?}` finds the pairs of solids that overlap and their common
   volume (touching faces don't count), and with `create` adds each overlap as a solid: check
   clearances between mating parts before printing them.
-- RENDER `{view?, width?, height?, edges?, path?}` draws a shaded picture of the solids
+- RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid) draws a shaded picture of the solids
   (default south-east isometric; `top`, `front`, `right`, `se`, `nw` … or any direction): the
   way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
 
 ## Files
 
-- **STL and 3MF.** STLOUT `{handles, path}` writes binary STL, 3DPRINT `{handles, path}` a 3MF
-  (one object per solid, in the drawing's units) or STL, and EXPORT or the CLI's
+- **STL and 3MF.** STLOUT `{handles?, path}` writes binary STL, 3DPRINT `{handles?, path}` a 3MF
+  (one object per solid, in the drawing's units) or STL (both default to the selected solids),
+  and EXPORT or the CLI's
   `--export part.3mf` write every solid in model space. Slicers (Bambu Studio, PrusaSlicer,
   Cura) open both.
 - **DXF and DWG.** A solid is saved as a polyface mesh (POLYLINE flag 64; edges between faces

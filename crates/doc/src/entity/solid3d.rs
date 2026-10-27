@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use cadcraft_geom::solid::primitives::MAX_COORD;
 use cadcraft_geom::solid::{FEATURE_ANGLE, MassProps, Mesh};
 use cadcraft_geom::{Bounds3, Mat3, Mat4, Vec3};
 use serde::{Deserialize, Serialize};
@@ -61,16 +62,23 @@ impl Solid3d {
         self.mesh.mass_props()
     }
 
-    /// Apply a 3D transform.
-    pub fn transform(&mut self, m: &Mat4) {
-        *self = Solid3d::new(self.mesh.transformed(m));
+    /// Apply a 3D transform; `false` (and no change) when it would take the solid past
+    /// [`MAX_COORD`] of the origin, where volumes and booleans overflow.
+    pub fn transform(&mut self, m: &Mat4) -> bool {
+        let out = self.mesh.transformed(m);
+        let in_range = |v: &Vec3| v.is_finite() && v.x.abs() <= MAX_COORD && v.y.abs() <= MAX_COORD && v.z.abs() <= MAX_COORD;
+        let ok = out.vertices.iter().all(in_range);
+        if ok {
+            *self = Solid3d::new(out);
+        }
+        ok
     }
 
     /// Apply a 2D transform (MOVE, ROTATE, SCALE, MIRROR in plan): X and Y as `m` maps them, Z
-    /// scaled by its scale factor so the solid keeps its proportions.
-    pub fn transform_2d(&mut self, m: &Mat3) {
+    /// scaled by its scale factor so the solid keeps its proportions. See [`Solid3d::transform`].
+    pub fn transform_2d(&mut self, m: &Mat3) -> bool {
         let mut t = Mat4::from_mat3(m);
         t.m[2][2] = m.scale_factor();
-        self.transform(&t);
+        self.transform(&t)
     }
 }

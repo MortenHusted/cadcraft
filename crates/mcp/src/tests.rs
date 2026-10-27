@@ -285,3 +285,12 @@ fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
     assert_ne!(r["result"]["isError"], json!(true), "{r}");
     app.join().unwrap();
 }
+
+/// A `view` given as null is no view: the 2D picture of the drawing.
+#[test]
+fn render_with_a_null_view_draws_the_drawing() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    tool(&mut s, "command_line", json!({"text": "circle 0,0 5"}));
+    let img = tool(&mut s, "render", json!({"view": null, "width": 64, "height": 64}));
+    assert_eq!(img["type"], "image");
+}

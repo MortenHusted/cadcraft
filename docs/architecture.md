@@ -41,8 +41,9 @@ wgpu or rfd.
   radius, ordinate, arc length), Leader, MLeader, Hatch (pattern, solid, gradient), Solid,
   Trace, Face3d, Solid3d (a closed triangle mesh, `geom::solid`), Viewport, Image, Wipeout,
   Table and Unknown (raw DXF tags).
-- There are no surfaces, meshes, ACIS data, multilines, tolerance frames or underlays in the
-  model yet ([gaps.md](gaps.md)); 3D solids are meshes, saved as polyface meshes.
+- There are no surfaces, MESH objects, ACIS data, multilines, tolerance frames or underlays in
+  the model yet ([gaps.md](gaps.md)); a 3D solid holds a closed triangle mesh, saved as a
+  polyface mesh.
 - Entity collections are copy-on-write, so undo is a whole-drawing snapshot that costs little.
 - Coordinates are f64 world units. 2D work happens in the WCS; there is no UCS yet.
 

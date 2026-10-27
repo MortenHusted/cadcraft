@@ -98,11 +98,12 @@ fn plan_part(m: &Mat4) -> Option<Mat3> {
     flat.then(|| Mat3 { a: r[0][0], b: r[1][0], c: r[0][1], d: r[1][1], e: r[0][3], f: r[1][3] })
 }
 
-/// `kind` transformed by `m`, or `None` for an object `m` would take out of plan.
+/// `kind` transformed by `m`, or `None` for an object `m` would take out of plan (or a solid
+/// out of range).
 fn transformed(kind: &EntityKind, m: &Mat4) -> Option<EntityKind> {
     let mut k = kind.clone();
     match &mut k {
-        EntityKind::Solid3d(so) => so.transform(m),
+        EntityKind::Solid3d(so) => so.transform(m).then_some(())?,
         other => other.transform(&plan_part(m)?),
     }
     Some(k)

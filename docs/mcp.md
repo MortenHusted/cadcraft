@@ -73,9 +73,12 @@ only through MCP.
 ## Modeling a part for 3D printing
 
 1. `new_drawing {"metric": true}`
-2. `execute {"command": "rectang", "params": {"p1": [0, 0], "p2": [60, 40], "fillet": 4}}` → `handle`
-3. `execute {"command": "extrude", "params": {"handles": ["<handle>"], "height": 5}}` → the plate
+2. `execute {"command": "rectang", "params": {"p1": [0, 0], "p2": [60, 40], "fillet": 4}}` →
+   `{"handle": "<outline>"}`
+3. `execute {"command": "extrude", "params": {"handles": ["<outline>"], "height": 5}}` →
+   `{"handles": ["<plate>"], …}`
 4. `execute {"command": "cylinder", "params": {"center": [15, 20, -1], "radius": 5, "height": 7}}`
+   → `{"handle": "<cylinder>", …}`
 5. `execute {"command": "subtract", "params": {"from": ["<plate>"], "remove": ["<cylinder>"]}}`:
    `closed: true` says the result is one watertight solid
 6. `render {"view": "se"}` — look at it; `execute {"command": "massprop", ...}` for volume and size

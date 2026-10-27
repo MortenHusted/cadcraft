@@ -133,7 +133,14 @@ impl Bounds3 {
         if self.is_empty() { Vec3::ZERO } else { self.max - self.min }
     }
     pub fn center(&self) -> Vec3 {
-        if self.is_empty() { Vec3::ZERO } else { self.min.lerp(self.max, 0.5) }
+        if self.is_empty() {
+            return Vec3::ZERO;
+        }
+        // As in `Bounds2::center`: halve first when the ends have opposite signs.
+        let mid = |a: f64, b: f64| {
+            if a.is_sign_negative() != b.is_sign_negative() { a * 0.5 + b * 0.5 } else { a + (b - a) * 0.5 }
+        };
+        Vec3::new(mid(self.min.x, self.max.x), mid(self.min.y, self.max.y), mid(self.min.z, self.max.z))
     }
     pub fn intersects(&self, o: &Bounds3) -> bool {
         !(self.is_empty()
@@ -171,5 +178,12 @@ mod tests {
         assert!((b.center().x / 1e308 - 1.3).abs() < 1e-12);
         assert_eq!(b.center().y, 5.0);
         assert_eq!(Bounds2::EMPTY.center(), Vec2::ZERO);
+    }
+
+    #[test]
+    fn center_3d_stays_finite_for_opposite_large_coordinates() {
+        let b = Bounds3::from_points([Vec3::new(-1e308, -1e308, -1e308), Vec3::new(1e308, 1e308, 1e308)]);
+        assert_eq!(b.center(), Vec3::ZERO);
+        assert_eq!(Bounds3::EMPTY.center(), Vec3::ZERO);
     }
 }
