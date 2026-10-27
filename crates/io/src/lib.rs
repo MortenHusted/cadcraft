@@ -16,6 +16,7 @@ mod dxf_xref;
 pub mod pdf;
 pub mod plotter;
 pub mod print3d;
+pub mod stl_read;
 pub mod svg;
 mod svg_read;
 
@@ -60,7 +61,7 @@ fn ext(name: &str) -> String {
 }
 
 /// Read a drawing; the format comes from the content (DXF ASCII/binary, DWG) or the name
-/// (SVG and gzip-compressed SVGZ).
+/// (SVG and gzip-compressed SVGZ, and STL: one 3D solid in model space).
 pub fn read(bytes: &[u8], name: &str) -> Result<Drawing> {
     if cadcraft_dwg::is_dwg(bytes) {
         let (dxf, notes) = cadcraft_dwg::dwg_to_dxf_noted(bytes, cadcraft_dwg::Limits::DEFAULT).map_err(IoError::Format)?;
@@ -70,6 +71,7 @@ pub fn read(bytes: &[u8], name: &str) -> Result<Drawing> {
     }
     match ext(name).as_str() {
         "svg" | "svgz" => svg_read::read(bytes),
+        "stl" => stl_read::read(bytes),
         "dxf" | "" => dxf_read::read(bytes),
         e if bytes.len() > 4 => dxf_read::read(bytes).map_err(|_| IoError::Unsupported(e.to_string())),
         e => Err(IoError::Unsupported(e.to_string())),

@@ -69,7 +69,9 @@ objects only when the transform keeps them in plan.
   (one object per solid, in the drawing's units) or STL (both default to the selected solids),
   and EXPORT or the CLI's
   `--export part.3mf` write every solid in model space. Slicers (Bambu Studio, PrusaSlicer,
-  Cura) open both.
+  Cura) open both. OPEN and IMPORT read an STL (binary or ASCII) as one solid, corners with the
+  same coordinates merged, so a part from elsewhere can be combined with new geometry and
+  printed again.
 - **DXF and DWG.** A solid is saved as a polyface mesh (POLYLINE flag 64; edges between faces
   that meet smoothly are hidden), the closest object an R2000 DXF has: other programs show its
   surface, and CADCraft xdata makes it a solid again when CADCraft opens the file. A solid with
@@ -91,4 +93,4 @@ boxes, cylinders and spheres.
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
 meshes, PYRAMID, POLYSOLID, SWEEP, LOFT, solid fillets and chamfers, SOLIDEDIT, 3DALIGN or
-3DARRAY, and no STL/STEP import. See F24 in [gaps.md](gaps.md).
+3DARRAY, and no 3MF or STEP import. See F24 in [gaps.md](gaps.md).
