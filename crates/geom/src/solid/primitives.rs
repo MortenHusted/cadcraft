@@ -16,6 +16,9 @@ pub const MIN_SEGMENTS: usize = 24;
 pub const MAX_SEGMENTS: usize = 720;
 /// Most points in an extruded or revolved profile.
 pub const MAX_PROFILE_POINTS: usize = 100_000;
+/// Largest coordinate, size or distance a solid may have (drawing units): beyond it volumes and
+/// inertias overflow.
+pub const MAX_COORD: f64 = 1e12;
 
 /// Facets around a full circle of `radius` (see [`CHORD_TOL`]).
 pub fn circle_segments(radius: f64) -> usize {
@@ -27,11 +30,23 @@ fn degenerate(m: &str) -> SolidError {
 }
 
 fn positive(v: f64, what: &str) -> Result<f64, SolidError> {
-    if v.is_finite() && v > crate::EPS { Ok(v) } else { Err(degenerate(&format!("The {what} must be a positive number."))) }
+    if v.is_finite() && v > crate::EPS && v <= MAX_COORD {
+        Ok(v)
+    } else {
+        Err(degenerate(&format!("The {what} must be a positive number up to {MAX_COORD:e}.")))
+    }
+}
+
+fn in_range(v: f64) -> bool {
+    v.is_finite() && v.abs() <= MAX_COORD
 }
 
 fn finite(p: Vec3, what: &str) -> Result<Vec3, SolidError> {
-    if p.is_finite() { Ok(p) } else { Err(degenerate(&format!("The {what} must be a finite point."))) }
+    if in_range(p.x) && in_range(p.y) && in_range(p.z) {
+        Ok(p)
+    } else {
+        Err(degenerate(&format!("The {what} must be a point within {MAX_COORD:e} of the origin.")))
+    }
 }
 
 fn segment_count(n: usize) -> Result<u32, SolidError> {
@@ -120,10 +135,10 @@ pub fn wedge(a: Vec3, b: Vec3) -> Result<Mesh, SolidError> {
 /// when the radii are equal, a cone when one is zero. A negative height builds downward.
 pub fn frustum(base: Vec3, r0: f64, r1: f64, height: f64, segments: usize) -> Result<Mesh, SolidError> {
     let base = finite(base, "center")?;
-    if !(r0.is_finite() && r1.is_finite()) || r0 < 0.0 || r1 < 0.0 || r0.max(r1) <= crate::EPS {
+    if !(in_range(r0) && in_range(r1)) || r0 < 0.0 || r1 < 0.0 || r0.max(r1) <= crate::EPS {
         return Err(degenerate("The radius must be a positive number."));
     }
-    if !height.is_finite() || height.abs() <= crate::EPS {
+    if !in_range(height) || height.abs() <= crate::EPS {
         return Err(degenerate("The height must be a non-zero number."));
     }
     let n = segment_count(segments)?;
@@ -228,8 +243,8 @@ fn clean_loops(loops: &[Vec<Vec2>]) -> Result<Vec<Vec<Vec2>>, SolidError> {
     let tol = size * 1e-12;
     let mut out = Vec::new();
     for l in loops {
-        if l.iter().any(|p| !p.is_finite()) {
-            return Err(degenerate("The profile has a point that is not a finite number."));
+        if l.iter().any(|p| !(in_range(p.x) && in_range(p.y))) {
+            return Err(degenerate("The profile has a point that is not a finite number or is too far out."));
         }
         let mut pts: Vec<Vec2> = Vec::with_capacity(l.len());
         for p in l {
@@ -330,7 +345,7 @@ impl Profile {
 /// Extrude the region bounded by `loops` (in the plane `z = elevation`; nested loops are holes)
 /// along `direction`, which must leave the plane.
 pub fn extrude(loops: &[Vec<Vec2>], elevation: f64, direction: Vec3) -> Result<Mesh, SolidError> {
-    if !elevation.is_finite() || !direction.is_finite() || direction.z.abs() <= crate::EPS {
+    if !in_range(elevation) || finite(direction, "direction").is_err() || direction.z.abs() <= crate::EPS {
         return Err(degenerate("The extrusion direction must leave the profile's plane."));
     }
     let p = Profile::new(loops)?;
@@ -353,7 +368,7 @@ pub fn extrude(loops: &[Vec<Vec2>], elevation: f64, direction: Vec3) -> Result<M
 /// axis; points on the axis stay single vertices.
 pub fn revolve(loops: &[Vec<Vec2>], origin: Vec2, axis: Vec2, angle: f64, segments: usize) -> Result<Mesh, SolidError> {
     let dir = axis.normalized();
-    if !origin.is_finite() || dir == Vec2::ZERO {
+    if !(in_range(origin.x) && in_range(origin.y)) || dir == Vec2::ZERO {
         return Err(degenerate("The axis of revolution needs two different points."));
     }
     if !angle.is_finite() || angle.abs() <= 1e-9 {

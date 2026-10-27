@@ -22,9 +22,10 @@ pub fn tool_definitions(has_ui: bool) -> Value {
             "inputSchema": {"type": "object", "properties": {"type": {"type": "string"}, "layer": {"type": "string"}, "selected": {"type": "boolean"},
                 "window": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "minItems": 2, "maxItems": 2},
                 "crossing": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}}}}),
-        json!({"name": "render", "description": "Render the active drawing to a PNG and return it as an image: fitted to the extents by default, or just the area `window` [[x0,y0],[x1,y1]] (drawing units), e.g. one sheet or one room of a large drawing. With a window and no size the image is 1600 px wide with the window's shape.",
+        json!({"name": "render", "description": "Render the active drawing to a PNG and return it as an image: fitted to the extents by default, or just the area `window` [[x0,y0],[x1,y1]] (drawing units), e.g. one sheet or one room of a large drawing. With a window and no size the image is 1600 px wide with the window's shape. With `view` (top, bottom, front, back, left, right, se, sw, ne, nw, or a direction [x,y,z] towards the viewer) it is instead a shaded 3D picture of the 3D solids, with their edges.",
             "inputSchema": {"type": "object", "properties": {"width": {"type": "integer", "minimum": 16}, "height": {"type": "integer", "minimum": 16}, "fit": {"type": "boolean"},
                 "window": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "minItems": 2, "maxItems": 2},
+                "view": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}]},
                 "path": {"type": "string"}}}}),
         json!({"name": "find_text", "description": "Read the drawing's texts: TEXT, MTEXT (formatting removed), block attributes and multileaders, each with its text, insertion point `at`, height, rotation, style, layer and handle. Filter by `contains` (any case), `layer` and/or `window` [[x0,y0],[x1,y1]] around the insertion points; page with offset and limit (default 200). Use it to find room names, sheet titles and notes without reading all the geometry.",
             "inputSchema": {"type": "object", "properties": {"contains": {"type": "string"}, "layer": {"type": "string"},
@@ -33,7 +34,7 @@ pub fn tool_definitions(has_ui: bool) -> Value {
         json!({"name": "new_drawing", "description": "Create a new drawing (imperial by default, or metric).",
             "inputSchema": {"type": "object", "properties": {"metric": {"type": "boolean"}}}}),
         json!({"name": "open", "description": "Open a DXF or DWG file.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}),
-        json!({"name": "save", "description": "Save the drawing (DXF or DWG by extension). A .svg, .png or .pdf path exports instead: the drawing keeps its name and unsaved changes.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}),
+        json!({"name": "save", "description": "Save the drawing (DXF or DWG by extension). A .svg, .png or .pdf path exports instead, and a .stl or .3mf path writes the 3D solids for a 3D printer's slicer: the drawing keeps its name and unsaved changes.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}}),
         json!({"name": "cancel", "description": "Press Escape: cancel the running command (or clear the selection).", "inputSchema": {"type": "object", "properties": {}}}),
     ];
     if has_ui {
@@ -137,6 +138,17 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         "screenshot" => b.call("ui.screenshot", a),
         "ui_inspect" => b.call("ui.inspect", json!({})),
         "ui_click" => b.call("ui.pointer", a),
+        // A view asks for the shaded 3D picture of the solids (the RENDER command).
+        "render" if a.get("view").is_some() => {
+            let params = json!({"view": a.get("view"), "width": a.get("width"), "height": a.get("height"), "path": a.get("path")});
+            return Ok(match b.call("engine.execute", json!({"command": "render", "params": params})) {
+                Ok(v) => match v.get("data").and_then(Value::as_str) {
+                    Some(data) => json!({"content": [{"type": "image", "data": data, "mimeType": "image/png"}]}),
+                    None => text(&v),
+                },
+                Err(e) => err_text(&e),
+            });
+        }
         "render" => {
             return Ok(match b.call("ui.render", a) {
                 Ok(v) => match v.get("pngBase64").and_then(Value::as_str) {

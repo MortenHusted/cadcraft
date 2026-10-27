@@ -78,6 +78,32 @@ fn agent_draws_a_plate_with_holes() {
     assert!(img["data"].as_str().unwrap().len() > 100);
 }
 
+/// An agent models a part for 3D printing through MCP only: a plate from a filleted rectangle,
+/// a hole, a boss, a check that it is one closed solid, and a look at it in 3D.
+#[test]
+fn agent_models_a_printable_part() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    let outline = tool(&mut s, "execute", json!({"command": "rectang", "params": {"p1": [0, 0], "p2": [60, 40], "fillet": 4}}));
+    let plate = tool(&mut s, "execute", json!({"command": "extrude", "params": {"handles": [outline["handle"]], "height": 5}}));
+    let plate = plate["handles"][0].clone();
+    let hole = tool(&mut s, "execute", json!({"command": "cylinder", "params": {"center": [15, 20, -1], "radius": 5, "height": 7}}));
+    let boss = tool(&mut s, "execute", json!({"command": "cylinder", "params": {"center": [45, 20, 5], "radius": 6, "height": 8}}));
+    tool(&mut s, "execute", json!({"command": "subtract", "params": {"from": [plate], "remove": [hole["handle"]]}}));
+    let r = tool(&mut s, "execute", json!({"command": "union", "params": {"handles": [plate, boss["handle"]]}}));
+    assert_eq!(r["closed"], json!(true), "{r}");
+    let m = tool(&mut s, "execute", json!({"command": "massprop", "params": {"handles": [plate]}}));
+    let b = &m["solids"][0]["boundingBox"];
+    assert_eq!((b[0][2].as_f64(), b[1][2].as_f64()), (Some(0.0), Some(13.0)), "{m}");
+    let img = tool(&mut s, "render", json!({"view": "se", "width": 320, "height": 240}));
+    assert_eq!(img["type"], "image");
+    assert_eq!(img["mimeType"], "image/png");
+    let custom = tool(&mut s, "render", json!({"view": [0, -1, 0.3], "width": 64, "height": 64}));
+    assert_eq!(custom["type"], "image");
+    tool(&mut s, "execute", json!({"command": "new", "params": {}}));
+    let bad = call(&mut s, 7, "tools/call", json!({"name": "render", "arguments": {"view": "se"}}));
+    assert_eq!(bad["result"]["isError"], json!(true), "an empty drawing has nothing to render in 3D");
+}
+
 /// Guards that bad input is reported, not fatal: a refused command and a screenshot without a
 /// UI are `isError` results, and malformed JSON is a parse error (-32700).
 #[test]

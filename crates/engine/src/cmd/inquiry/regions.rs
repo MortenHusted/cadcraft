@@ -1,4 +1,5 @@
-//! Region booleans (UNION, SUBTRACT, INTERSECT) and MASSPROP.
+//! Region booleans (UNION, SUBTRACT, INTERSECT) and MASSPROP. 3D solids among the objects go
+//! to the solid booleans and mass properties (`solids`).
 //!
 //! The booleans handle regions whose boundaries don't cross or touch: each loop then lies wholly
 //! inside or outside the other region, and the result keeps the loops that bound it (union: the
@@ -7,6 +8,7 @@
 //! boundaries need curve splitting and report "not available yet".
 
 use cadcraft_doc::{EntityKind, Handle, HatchLoop, MAX_REGION_LOOPS, Region};
+use cadcraft_geom::solid::BoolOp;
 use cadcraft_geom::{Line, Vec2, line_line, point_in_polygon};
 use serde_json::{Value, json};
 
@@ -22,21 +24,21 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("union", "Union", run_union)
             .menu(&["Modify", "Solid Editing", "Union"])
             .alias(&["uni"])
-            .params("{handles?} (regions)")
+            .params("{handles?} (regions or 3D solids) → {handle, volume?, closed?, message}")
             .interactive(|_| Ok(Box::new(SelectRun::new("union", "UNION")))),
         CommandSpec::new("subtract", "Subtract", run_subtract)
             .menu(&["Modify", "Solid Editing", "Subtract"])
             .alias(&["su"])
-            .params("{from: [handles], remove: [handles]} (regions)")
+            .params("{from: [handles], remove: [handles]} (regions or 3D solids) → {handle, volume?, closed?, message}")
             .interactive(|_| Ok(Box::new(SubtractM::default()))),
         CommandSpec::new("intersect", "Intersect", run_intersect)
             .menu(&["Modify", "Solid Editing", "Intersect"])
             .alias(&["in"])
-            .params("{handles?} (regions)")
+            .params("{handles?} (regions or 3D solids) → {handle, volume?, closed?, message}")
             .interactive(|_| Ok(Box::new(SelectRun::new("intersect", "INTERSECT")))),
         CommandSpec::new("massprop", "Region/Mass Properties", run_massprop)
             .menu(&["Tools", "Inquiry", "Region/Mass Properties"])
-            .params("{handles?} (regions) → properties of each, plus `selfCheck` (found/analyzed/skipped with reasons, caps, implausible values)")
+            .params("{handles?} (regions and 3D solids) → `regions` and `solids` (mass and volume at unit density, bounding box, centroid, inertia, `closed`), plus `selfCheck` (found/analyzed/skipped with reasons, caps, implausible values)")
             .noundo()
             .interactive(|_| Ok(Box::new(SelectRun::new("massprop", "MASSPROP")))),
     ]
@@ -163,14 +165,25 @@ fn fold(s: &mut Session, hs: &[Handle], op: Op) -> Result<Value> {
     )
 }
 
+/// The solids among `hs` combined by `op` (`solids::combine`), then the regions among them by
+/// `region_op`; the solids' result when there were solids.
+fn solids_then_regions(s: &mut Session, cmd: &str, hs: &[Handle], op: BoolOp, region_op: Op) -> Result<Value> {
+    let solid = super::super::solids::combine(s, cmd, hs, &[], op)?;
+    match solid {
+        Some(v) if regions(s, hs)?.is_empty() => Ok(v),
+        Some(v) => fold(s, hs, region_op).map(|_| v),
+        None => fold(s, hs, region_op),
+    }
+}
+
 fn run_union(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
-    fold(s, &hs, Op::Union)
+    solids_then_regions(s, "union", &hs, BoolOp::Union, Op::Union)
 }
 
 fn run_intersect(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
-    fold(s, &hs, Op::Intersect)
+    solids_then_regions(s, "intersect", &hs, BoolOp::Intersection, Op::Intersect)
 }
 
 fn handles(p: &Value, key: &str) -> Result<Vec<Handle>> {
@@ -179,6 +192,16 @@ fn handles(p: &Value, key: &str) -> Result<Vec<Handle>> {
 }
 
 fn subtract(s: &mut Session, from: &[Handle], remove: &[Handle]) -> Result<Value> {
+    if let Some(v) = super::super::solids::combine(s, "subtract", from, remove, BoolOp::Difference)? {
+        if regions(s, from)?.is_empty() {
+            return Ok(v);
+        }
+        return subtract_regions(s, from, remove).map(|_| v);
+    }
+    subtract_regions(s, from, remove)
+}
+
+fn subtract_regions(s: &mut Session, from: &[Handle], remove: &[Handle]) -> Result<Value> {
     let (a, b) = (regions(s, from)?, regions(s, remove)?);
     let Some(((h0, first), rest)) = a.split_first() else { return Err(other("Select regions to subtract from.")) };
     let mut acc = first.clone();
@@ -255,8 +278,9 @@ impl Interactive for SubtractM {
 fn run_massprop(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
     let rs = regions(s, &hs)?;
-    if rs.is_empty() {
-        return Err(other("Select one or more regions."));
+    let (solids, solid_lines) = super::super::solids::massprop(s, &hs)?;
+    if rs.is_empty() && solids.is_empty() {
+        return Err(other("Select one or more regions or 3D solids."));
     }
     let mut check = SelfCheck::new();
     let d = s.doc()?;
@@ -267,7 +291,7 @@ fn run_massprop(s: &mut Session, p: &Value) -> Result<Value> {
     for h in &hs {
         check.found(1);
         match d.entity(*h).map(|e| &e.kind) {
-            Some(EntityKind::Region(_)) => check.analyzed(1),
+            Some(EntityKind::Region(_) | EntityKind::Solid3d(_)) => check.analyzed(1),
             Some(kind) => check.skip(kind.type_name(), "not a region", 1),
             None => check.skip("Missing", "no such object", 1),
         }
@@ -318,5 +342,6 @@ fn run_massprop(s: &mut Session, p: &Value) -> Result<Value> {
             ang.cos(),
         ));
     }
-    Ok(json!({ "regions": out, "selfCheck": check.to_json(), "message": lines.join("\n") }))
+    lines.extend(solid_lines);
+    Ok(json!({ "regions": out, "solids": solids, "selfCheck": check.to_json(), "message": lines.join("\n") }))
 }
