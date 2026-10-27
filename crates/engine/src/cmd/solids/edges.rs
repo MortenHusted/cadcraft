@@ -99,21 +99,25 @@ fn finish(s: &mut Session, cmd: &str, p: &Value, how: impl Fn(&Edge) -> Blend) -
         return Err(bad(cmd, "select 3D solids (on unlocked layers)"));
     }
     let picked = chosen(cmd, &solids, p.get("edges"))?;
-    let (mut handles, mut volumes, mut closed, mut count) = (Vec::new(), Vec::new(), true, 0);
+    // Finish every solid before changing the drawing, so a failure leaves them all as they were.
+    let (mut done, mut count) = (Vec::new(), 0);
     for ((h, so), es) in solids.iter().zip(picked) {
         if es.is_empty() {
             continue;
         }
         count += es.len();
         let jobs: Vec<(Edge, Blend)> = es.into_iter().map(|e| (how(&e), e)).map(|(b, e)| (e, b)).collect();
-        let mesh = blend(so.mesh(), &jobs).map_err(|e| solid_error(cmd, e))?;
-        closed &= mesh.check().is_closed();
-        volumes.push(mesh.volume());
-        s.doc_mut()?.modify_entity(*h, |e| e.kind = EntityKind::Solid3d(Solid3d::new(mesh)))?;
-        handles.push(hex(*h));
+        done.push((*h, blend(so.mesh(), &jobs).map_err(|e| solid_error(cmd, e))?));
     }
     if count == 0 {
         return Err(bad(cmd, "no edges picked"));
+    }
+    let (mut handles, mut volumes, mut closed) = (Vec::new(), Vec::new(), true);
+    for (h, mesh) in done {
+        closed &= mesh.check().is_closed();
+        volumes.push(mesh.volume());
+        s.doc_mut()?.modify_entity(h, |e| e.kind = EntityKind::Solid3d(Solid3d::new(mesh)))?;
+        handles.push(hex(h));
     }
     Ok(json!({ "handles": handles, "edges": count, "volumes": volumes, "closed": closed }))
 }
