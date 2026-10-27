@@ -21,7 +21,7 @@ dialog. JSON points are `[x, y, z]` (a missing z is 0).
 | CONE | `{center, radius \| diameter, topRadius?, height, segments?}` (a frustum when `topRadius` > 0) |
 | SPHERE | `{center, radius \| diameter, segments?}` |
 | TORUS | `{center, radius \| diameter, tubeRadius \| tubeDiameter, segments?}` (`radius` to the tube's center) |
-| EXTRUDE | `{handles, height \| direction, keep?}`: circles, full ellipses, closed polylines (fillets and arcs too), closed splines and planar 3D polylines become solids; a region's islands become holes |
+| EXTRUDE | `{handles, height \| direction, keep?}`: circles, full ellipses, closed polylines (fillets and arcs too), closed splines and planar 3D polylines become solids; a region's islands become holes; TEXT in a TrueType font becomes solid lettering (counters as holes), to emboss with UNION or engrave with SUBTRACT |
 | REVOLVE | `{handles, axis: [[x,y],[x,y]], angle? (360)}` about an axis in the profiles' plane |
 
 Like AutoCAD with DELOBJ at its default, EXTRUDE and REVOLVE erase the profiles unless `keep`

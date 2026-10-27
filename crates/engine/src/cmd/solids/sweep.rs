@@ -1,9 +1,10 @@
 //! Solids from closed profiles: EXTRUDE and REVOLVE. A profile is a closed object in a plane
 //! parallel to XY: a circle, a full ellipse, a closed polyline or spline, a planar 3D polyline,
-//! or a region (whose islands become holes). Like AutoCAD with DELOBJ at its default, the
+//! a region (whose islands become holes), or single-line text in a TrueType font (its letters'
+//! outlines, the counters of letters such as O as holes), to emboss or engrave lettering. Like AutoCAD with DELOBJ at its default, the
 //! profiles are erased unless `keep` is set; each solid takes its profile's layer and properties.
 
-use cadcraft_doc::{Entity, EntityKind, Handle};
+use cadcraft_doc::{Drawing, Entity, EntityKind, Handle};
 use cadcraft_geom::solid::primitives::{self, CHORD_TOL};
 use cadcraft_geom::{Bounds2, Polyline, TAU, Vec2, Vec3, rad};
 use serde_json::{Value, json};
@@ -18,7 +19,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("extrude", "Extrude", run_extrude)
             .menu(&["Draw", "3D Modeling", "Extrude"])
             .alias(&["ext"])
-            .params("{handles?: closed profiles (circles, closed polylines/splines, ellipses, regions), height | direction: [x,y,z], keep?: false (erase the profiles)} → {handles, volumes, skipped}")
+            .params("{handles?: closed profiles (circles, closed polylines/splines, ellipses, regions, TEXT in a TrueType font), height | direction: [x,y,z], keep?: false (erase the profiles)} → {handles, volumes, skipped}")
             .interactive(|_| Ok(Box::new(SweepM::new(Kind::Extrude)))),
         CommandSpec::new("revolve", "Revolve", run_revolve)
             .menu(&["Draw", "3D Modeling", "Revolve"])
@@ -35,7 +36,7 @@ struct Profile {
 }
 
 /// The profile of `e`, or why it has none.
-fn profile(e: &Entity) -> std::result::Result<Profile, &'static str> {
+fn profile(d: &Drawing, e: &Entity) -> std::result::Result<Profile, &'static str> {
     let n = e.common.extrusion;
     if n.x.abs() > 1e-9 || n.y.abs() > 1e-9 || n.z <= 0.0 {
         return Err("not in a plane parallel to XY");
@@ -73,6 +74,15 @@ fn profile(e: &Entity) -> std::result::Result<Profile, &'static str> {
             Ok(Profile { loops: vec![p.points.iter().map(|q| q.xy()).collect()], z })
         }
         EntityKind::Region(r) => Ok(Profile { loops: r.tessellate(tol(r.bounds())), z: 0.0 }),
+        // Text in an outline (TrueType) font: its glyphs' contours, counters as holes.
+        EntityKind::Text(t) => {
+            let (shaped, _) = cadcraft_render::place_text_entity(d, t, &t.value);
+            let loops: Vec<Vec<Vec2>> = shaped.glyphs.into_iter().flatten().filter(|c| c.len() >= 3).collect();
+            if loops.is_empty() {
+                return Err("text in a single-stroke font has no outline: give its text style a TrueType font");
+            }
+            Ok(Profile { loops, z: t.insert.z })
+        }
         _ => Err("not a closed profile"),
     }
 }
@@ -89,7 +99,7 @@ fn sweep(s: &mut Session, cmd: &str, p: &Value, make: impl Fn(&Profile) -> Resul
             skipped.push(json!({ "handle": hex(h), "reason": "on a locked layer" }));
             continue;
         }
-        let prof = match profile(&e) {
+        let prof = match profile(s.doc()?, &e) {
             Ok(pr) => pr,
             Err(why) => {
                 skipped.push(json!({ "handle": hex(h), "reason": why }));

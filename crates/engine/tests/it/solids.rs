@@ -338,3 +338,27 @@ fn printcheck_finds_what_needs_support() {
     assert!(r["message"].as_str().unwrap().contains("larger than the build volume"), "{r}");
     assert!(s.execute("printcheck", &json!({"handles": [plate], "limit": 120})).is_err());
 }
+
+#[test]
+fn text_extrudes_into_lettering_in_an_outline_font() {
+    let mut s = Session::new();
+    // The built-in stroke font draws lines, not outlines: nothing to extrude.
+    let t = handle(&run(&mut s, "text", json!({"at": [0, 0], "text": "AB", "height": 5})));
+    let e = s.execute("extrude", &json!({"handles": [t], "height": 1})).unwrap_err().to_string();
+    assert!(e.contains("single-stroke"), "{e}");
+    // With a TrueType font (when this machine has Arial) the letters become one closed solid,
+    // the counters of O and B holes in it.
+    run(&mut s, "style", json!({"name": "Label", "font": "Arial", "current": true}));
+    let t = handle(&run(&mut s, "text", json!({"at": [0, 0], "text": "OB", "height": 10})));
+    match s.execute("extrude", &json!({"handles": [t], "height": 2})) {
+        Ok(r) => {
+            let so = solid(&s, r["handles"][0].as_str().unwrap());
+            assert!(so.mesh().check().is_closed());
+            let b = so.bounds();
+            near(b.max.z - b.min.z, 2.0, 1e-9);
+            // Well under the box around the letters: the counters are holes.
+            assert!(so.mass_props().volume < (b.max.x - b.min.x) * (b.max.y - b.min.y) * 2.0 * 0.8);
+        }
+        Err(e) => assert!(e.to_string().contains("single-stroke"), "{e}"),
+    }
+}
