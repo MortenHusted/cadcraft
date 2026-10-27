@@ -215,8 +215,8 @@ fn run_slice(s: &mut Session, p: &Value) -> Result<Value> {
     if solids.is_empty() {
         return Err(bad("slice", "select 3D solids to slice"));
     }
-    let mut out = Vec::new();
-    let space = s.space();
+    // Cut every solid before changing the drawing, so a failure leaves them all as they were.
+    let mut cuts = Vec::with_capacity(solids.len());
     for (h, so) in solids {
         let b = so.bounds();
         let reach = 2.0 * (b.size().len() + b.center().dist(point)) + 1.0;
@@ -225,10 +225,14 @@ fn run_slice(s: &mut Session, p: &Value) -> Result<Value> {
             if keep != "below" { boolean(so.mesh(), &cut, BoolOp::Intersection).map_err(|e| solid_error("slice", e))? } else { Mesh::default() };
         let below =
             if keep != "above" { boolean(so.mesh(), &cut, BoolOp::Difference).map_err(|e| solid_error("slice", e))? } else { Mesh::default() };
-        let common = curves::entity(s, h)?.common;
-        let d = s.doc_mut()?;
+        cuts.push((h, curves::entity(s, h)?.common, [above, below]));
+    }
+    let mut out = Vec::new();
+    let space = s.space();
+    let d = s.doc_mut()?;
+    for (h, common, pieces) in cuts {
         d.remove_entity(h);
-        for piece in [above, below].into_iter().filter(|m| !m.is_empty()) {
+        for piece in pieces.into_iter().filter(|m| !m.is_empty()) {
             out.push(hex(d.add(&space, common.clone(), EntityKind::Solid3d(Solid3d::new(piece)))?));
         }
     }

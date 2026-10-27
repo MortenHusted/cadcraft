@@ -298,3 +298,14 @@ fn a_mixed_boolean_whose_regions_fail_changes_nothing() {
     assert!(s.execute("union", &json!({"handles": all})).is_err());
     assert_eq!(solids(&s).len(), 2, "the solids are not united either");
 }
+
+#[test]
+fn a_slice_that_fails_on_one_solid_changes_none() {
+    let mut s = Session::new();
+    let near_box = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [2, 2, 2]})));
+    // So far out that the half-space reaching it is past the largest coordinate a solid may have.
+    let far = handle(&run(&mut s, "box", json!({"corner": [9e11, 0, 0], "opposite": [9e11 + 1.0, 1, 1]})));
+    assert!(s.execute("slice", &json!({"handles": [near_box, far], "plane": "xy", "point": [0, 0, 1]})).is_err());
+    assert_eq!(solids(&s).len(), 2);
+    near(solid(&s, &near_box).mass_props().volume, 8.0, 1e-9);
+}
