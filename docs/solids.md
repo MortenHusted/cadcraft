@@ -53,6 +53,8 @@ objects only when the transform keeps them in plan.
 - RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid) draws a shaded picture of the solids
   (default south-east isometric; `top`, `front`, `right`, `se`, `nw` … or any direction): the
   way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
+  Typed or chosen from a menu, RENDER opens the Render window: the solids shaded, preset view
+  buttons, drag the picture to orbit; it follows the drawing as you edit.
 
 ## Files
 
@@ -79,6 +81,7 @@ boxes, cylinders and spheres.
 
 ## Not yet
 
-No 3D view in the drawing area (solids show as plan wireframes; use RENDER), no UCS, surfaces,
+No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
+3D), no UCS, surfaces,
 meshes, PYRAMID, POLYSOLID, SWEEP, LOFT, solid fillets and chamfers, SOLIDEDIT, 3DALIGN or
 3DARRAY, and no STL/STEP import. See F24 in [gaps.md](gaps.md).

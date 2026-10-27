@@ -25,6 +25,7 @@ pub fn specs() -> Vec<CommandSpec> {
             .params("{first?: [handles] (default: the selection), second?: [handles] (default: check the first set against itself), create?: false (add each interference as a solid)} → {pairs: [{a, b, volume, handle?}], count}")
             .interactive(|_| Ok(Box::new(SelectRun::new("interfere", "INTERFERE")))),
         CommandSpec::new("render", "Render", run_render)
+            .menu(&["View", "Render", "Render"])
             .alias(&["rr"])
             .params("{handles?: solids (default: every visible solid in model space), view?: top|bottom|front|back|left|right|se|sw|ne|nw (default se) | [x,y,z] (towards the viewer), width?: 1200, height?: 900, edges?: true, path?: \"NAME.png\" (else base64 `data`)} → a shaded PNG of the solids")
             .noundo(),
