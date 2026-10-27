@@ -98,13 +98,47 @@ fn plan_part(m: &Mat4) -> Option<Mat3> {
     flat.then(|| Mat3 { a: r[0][0], b: r[1][0], c: r[0][1], d: r[1][1], e: r[0][3], f: r[1][3] })
 }
 
+/// Raise `k` by `dz`; false for an object without a height of its own (splines, regions…).
+fn lift(k: &mut EntityKind, dz: f64) -> bool {
+    let up = |p: &mut Vec3| p.z += dz;
+    match k {
+        EntityKind::Line(l) => {
+            up(&mut l.a);
+            up(&mut l.b);
+        }
+        EntityKind::Point(p) => up(&mut p.p),
+        EntityKind::Circle(c) => up(&mut c.center),
+        EntityKind::Arc(a) => up(&mut a.center),
+        EntityKind::Ellipse(e) => up(&mut e.center),
+        EntityKind::Helix(h) => up(&mut h.center),
+        EntityKind::LwPolyline(p) => p.elevation += dz,
+        EntityKind::Polyline3d(p) => p.points.iter_mut().for_each(up),
+        EntityKind::Hatch(h) => h.elevation += dz,
+        EntityKind::Text(t) => {
+            up(&mut t.insert);
+            t.align_pt.iter_mut().for_each(up);
+        }
+        EntityKind::MText(t) => up(&mut t.insert),
+        EntityKind::Solid(so) | EntityKind::Trace(so) => so.corners.iter_mut().for_each(up),
+        EntityKind::Face3d(f) => f.corners.iter_mut().for_each(up),
+        _ => return false,
+    }
+    true
+}
+
 /// `kind` transformed by `m`, or `None` for an object `m` would take out of plan (or a solid
-/// out of range).
+/// out of range). A move straight up or down raises the objects that have a height.
 fn transformed(kind: &EntityKind, m: &Mat4) -> Option<EntityKind> {
     let mut k = kind.clone();
     match &mut k {
         EntityKind::Solid3d(so) => so.transform(m).then_some(())?,
-        other => other.transform(&plan_part(m)?),
+        other => {
+            other.transform(&plan_part(m)?);
+            let (dz, scale_z) = (m.m[2][3], m.m[2][2]);
+            if dz != 0.0 && (scale_z != 1.0 || !lift(other, dz)) {
+                return None;
+            }
+        }
     }
     Some(k)
 }

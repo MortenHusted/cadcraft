@@ -173,6 +173,15 @@ fn move_rotate_and_mirror_in_3d() {
     assert_eq!((r["moved"].as_u64(), r["skipped"].as_u64()), (Some(2), Some(0)));
     let bb = solid(&s, &b).bounds();
     assert_eq!((bb.min.x, bb.min.y, bb.min.z), (1.0, 2.0, 3.0));
+    // The line is raised too; a spline, which has no height of its own, stays.
+    match &s.doc().unwrap().entity(Handle::parse_hex(&line).unwrap()).unwrap().kind {
+        EntityKind::Line(l) => assert_eq!((l.a.z, l.b.z, l.b.x), (3.0, 3.0, 6.0)),
+        k => panic!("{}", k.type_name()),
+    }
+    let sp = handle(&run(&mut s, "spline", json!({"fit": [[0, 0], [5, 5], [10, 0]]})));
+    let r = run(&mut s, "3dmove", json!({"handles": [sp], "displacement": [0, 0, 1]}));
+    assert_eq!((r["moved"].as_u64(), r["skipped"].as_u64()), (Some(0), Some(1)));
+    run(&mut s, "erase", json!({"handles": [sp]}));
     // Standing the box on its side: a rotation about X takes the line out of plan, so it stays.
     let r = run(&mut s, "3drotate", json!({"handles": [b, line], "base": [1, 2, 3], "axis": "x", "angle": 90}));
     assert_eq!((r["moved"].as_u64(), r["skipped"].as_u64()), (Some(1), Some(1)));
