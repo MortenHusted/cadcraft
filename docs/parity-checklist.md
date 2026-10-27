@@ -1,10 +1,10 @@
 # Parity checklist
 
-> **Generated:** 2026-10-25 by `cargo xtask parity`. Do not edit by hand.
+> **Generated:** 2026-10-27 by `cargo xtask parity`. Do not edit by hand.
 
 Menu-breadth parity: a reference menu item counts as covered when a CADCraft command is registered under the same menu label. It measures breadth, not depth; see [target-app-parity.md](target-app-parity.md) for the weighted assessment.
 
-**Menu breadth: 296 / 491 items (60%)** · 441 registered commands.
+**Menu breadth: 327 / 491 items (67%)** · 470 registered commands.
 
 | Menu | Items | Covered | % |
 |---|---|---|---|
@@ -14,9 +14,9 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 | Insert | 11 | 5 | 45% |
 | Format | 27 | 26 | 96% |
 | Tools | 85 | 66 | 78% |
-| Draw | 87 | 55 | 63% |
+| Draw | 87 | 74 | 85% |
 | Dimension | 28 | 28 | 100% |
-| Modify | 113 | 52 | 46% |
+| Modify | 113 | 64 | 57% |
 | Window | 22 | 3 | 14% |
 | Help | 8 | 0 | 0% |
 
@@ -97,29 +97,10 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Tools > Express Tools > Super Hatch > Image...
 - Tools > Express Tools > Super Hatch > Xref...
 - Tools > Express Tools > Super Hatch > Select Existing Object
-- Draw > 3D Modeling > Polysolid
-- Draw > 3D Modeling > Box
-- Draw > 3D Modeling > Wedge
-- Draw > 3D Modeling > Cone
-- Draw > 3D Modeling > Sphere
-- Draw > 3D Modeling > Cylinder
-- Draw > 3D Modeling > Torus
-- Draw > 3D Modeling > Pyramid
-- Draw > 3D Modeling > Extrude
-- Draw > 3D Modeling > Revolve
-- Draw > 3D Modeling > Sweep
-- Draw > 3D Modeling > Loft
 - Draw > 3D Modeling > Section Plane
 - Draw > 3D Modeling > Surfaces > Planar
 - Draw > 3D Modeling > Surfaces > Network
 - Draw > 3D Modeling > Surfaces > Patch
-- Draw > 3D Modeling > Meshes > Primitives > Box
-- Draw > 3D Modeling > Meshes > Primitives > Wedge
-- Draw > 3D Modeling > Meshes > Primitives > Cone
-- Draw > 3D Modeling > Meshes > Primitives > Sphere
-- Draw > 3D Modeling > Meshes > Primitives > Cylinder
-- Draw > 3D Modeling > Meshes > Primitives > Torus
-- Draw > 3D Modeling > Meshes > Primitives > Pyramid
 - Draw > 3D Modeling > Meshes > Smooth Mesh
 - Draw > 3D Modeling > Meshes > 3D Face
 - Draw > 3D Modeling > Meshes > Meshes, Revolved Surface
@@ -137,21 +118,12 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Modify > Object > Block Description...
 - Modify > Clip > Image
 - Modify > Clip > Xref
-- Modify > 3D Operations > 3D Move
-- Modify > 3D Operations > 3D Rotate
-- Modify > 3D Operations > 3D Align
-- Modify > 3D Operations > 3D Mirror
-- Modify > 3D Operations > 3D Array
-- Modify > 3D Operations > Interference Checking
-- Modify > 3D Operations > Slice
 - Modify > 3D Operations > Thicken
 - Modify > 3D Operations > Convert to Solid
 - Modify > 3D Operations > Convert to Surface
 - Modify > 3D Operations > Extract Edges
 - Modify > 3D Operations > Extract Isolines
 - Modify > Solid Editing > Imprint Edges
-- Modify > Solid Editing > Fillet edges
-- Modify > Solid Editing > Chamfer edges
 - Modify > Solid Editing > Color edges
 - Modify > Solid Editing > Copy edges
 - Modify > Solid Editing > Extrude faces
@@ -163,9 +135,6 @@ Menu-breadth parity: a reference menu item counts as covered when a CADCraft com
 - Modify > Solid Editing > Color faces
 - Modify > Solid Editing > Copy faces
 - Modify > Solid Editing > Clean
-- Modify > Solid Editing > Separate
-- Modify > Solid Editing > Shell
-- Modify > Solid Editing > Check
 - Modify > Surface Editing > Untrim
 - Modify > Surface Editing > Sculpt
 - Modify > Surface Editing > Convert to NURBS

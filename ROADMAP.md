@@ -2,7 +2,7 @@
 
 **Stage: pre-alpha** · next: alpha, ~2 points (38% → 40% ready for real work) and ~125–190 Opus 5.5 hours away (the four failing core workflows of the [alpha gate](docs/roadmap.md#alpha-gate))
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (3D solids for 3D printing: mesh kernel, modeling commands, RENDER, STL/3MF; 3D modelling 2% → 8%) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (3D solid modeling: fillets, sweeps, lofts, shells, STL/3MF import, STEP export; 3D modelling 8% → 20%) · **Target:** Autodesk AutoCAD 2027
 
 CADCraft targets full parity with AutoCAD (2D drafting first, then annotation, layouts and
 plotting, DWG, parametrics and 3D), plus what AutoCAD doesn't have: agent control over MCP, a
@@ -31,7 +31,7 @@ is ≈ 600–930 h away.
 
 | Audience | Ready % | Opus 5.5 agent wall-clock hours to ~95% | Work that dominates |
 |---|---:|---|---|
-| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
+| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D (200–330 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
 | Mainstream practitioner (2D drafter) | ≈ 28% | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
 | Essentials user | ≈ 46% | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
 
@@ -75,7 +75,7 @@ Hours are Opus 5.5 agent wall-clock hours, calibrated on this repo's own build: 
 | Layouts, viewports, plotting | 35% | 35–50 | [gaps.md](docs/gaps.md#features) |
 | Inquiry and utilities | 30% | 30–45 | [gaps.md](docs/gaps.md#features) |
 | Parametric constraints | 50% | 20–30 | [geometry-parity.md](docs/geometry-parity.md) |
-| 3D modelling and rendering | 8% | 260–410 | [gaps.md](docs/gaps.md#features), [solids.md](docs/solids.md) |
+| 3D modelling and rendering | 20% | 200–330 | [gaps.md](docs/gaps.md#features), [solids.md](docs/solids.md) |
 | Collaboration and cloud | 5% | 40–70 | [gaps.md](docs/gaps.md#features) |
 
 ## Languages
@@ -119,6 +119,7 @@ Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md)
 
 | Date | Entry |
 |---|---|
+| 2026-10-27 | 3D solid modeling: FILLETEDGE and CHAMFEREDGE (ball-rounded corners), SWEEP (threads along a HELIX), LOFT, PYRAMID, POLYSOLID, 3DARRAY, 3DALIGN, SOLIDEDIT Shell/Separate/Check, EXTRUDE of TrueType text, PRINTCHECK, the Render window, STL and 3MF import, STEP export (faceted B-rep). 3D modelling 8% → 20% ([solids.md](docs/solids.md)) |
 | 2026-10-27 | 3D solids for 3D printing: closed-mesh solids with booleans (`geom/src/solid`), saved as polyface meshes; BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, EXTRUDE, REVOLVE, UNION/SUBTRACT/INTERSECT and MASSPROP on solids, 3DMOVE, 3DROTATE, MIRROR3D, SLICE, INTERFERE; RENDER (shaded picture, MCP `render` with `view`); STLOUT, 3DPRINT and STL/3MF EXPORT. 3D modelling 2% → 8% ([solids.md](docs/solids.md)) |
 | 2026-10-21 | DXF save keeps each proxy object's and proxy entity's class: its class number (group 91) is renumbered to the rewritten CLASSES instead of naming another class, so AutoCAD's visual styles in an R14 file no longer come back as SCALE or MLEADERSTYLE (#1812) |
 | 2026-10-14 | HATCHEDIT adds boundaries from internal points or closed objects and removes selected loops in the dialog, command line and JSON command; associative links and undo are covered by tests. |
@@ -137,6 +138,7 @@ Ranked; detail and the full beta checklist in [docs/roadmap.md](docs/roadmap.md)
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | 3D solid modeling (fillets, sweeps, lofts, shells, 3D arrays, STL/3MF import, STEP export): 3D modelling 8% → 20%, 260–410 h → 200–330 h |
 | 2026-10-27 | minor | 3D solids (mesh kernel, modeling commands, RENDER, STL/3MF): 3D modelling 2% → 8%, 300–450 h → 260–410 h |
 | 2026-10-21 | trivial | Progress log: proxy objects keep their class through a save (#1812) |
 | 2026-10-14 | minor | Progress log: HATCHEDIT boundary add/remove |

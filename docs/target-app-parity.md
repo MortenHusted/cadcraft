@@ -1,6 +1,6 @@
 # Target-app parity: CADCraft vs AutoCAD 2027
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-24 · **Change:** minor (COMPAREEXPORT; numbers not re-measured) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (3D solid modeling: 3D 2% → 20%; other numbers not re-measured) · **Target:** Autodesk AutoCAD 2027
 
 The authoritative assessment of how close CADCraft is to AutoCAD, and how much Opus 5.5 work
 remains. [ROADMAP.md](../ROADMAP.md) summarises it, [gaps.md](gaps.md) lists every shortfall,
@@ -28,7 +28,7 @@ Stage: **pre-alpha**. Four of the five core workflows fail the [alpha gate](road
 
 | Audience | Ready % | Opus 5.5 agent wall-clock hours to ~95% | Work that dominates |
 |---|---:|---|---|
-| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D kernel (300–450 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
+| Full target (ready for real work) | ≈ 38% | ≈ 1,150–1,850 h (≈ 70% parallelises across 4–6 agents: ≈ 300–480 h elapsed) | 3D (200–330 h), DWG/DXF and other formats, AutoLISP and ecosystem, blocks/xrefs/dynamic blocks, localization |
 | Mainstream practitioner (2D drafter) | ≈ 28% | ≈ 570–880 h (≈ 70% parallelises: ≈ 150–240 h elapsed) | lossless DWG exchange and a real-file corpus, precision input (tracking, dynamic input), 2D geometry precision, blocks/xrefs, annotation depth, stability backlog |
 | Essentials user | ≈ 46% | ≈ 140–225 h (≈ 50% parallelises across 3 agents: ≈ 60–110 h elapsed) | stubbed options in basic draw/modify commands, opening DWGs people send, launch/stability fixes, plot dialog, context menus and dynamic input |
 
@@ -158,9 +158,9 @@ presence: an option that prints "not available yet" doesn't count.
 | Layouts, viewports, plotting | 9% | 35% | 35–50 | layouts, per-VP layers, page setups, plot styles (CTB/STB), Plot dialog (#160), Plot Preview and PUBLISH (#186), plotter devices (#564), PDF with text, layers and sheets (#567, #571), polygonal/object/clipped viewports (#453), annotative scales (#468); no MVIEW Restore, no system printers | [gaps](gaps.md#features) |
 | Inquiry and utilities | 4% | 30% | 30–45 | DIST, AREA, ID, LIST, MEASUREGEOM, CAL, FIND, COUNT across layouts, QuickCalc, COMPARE (#563) and COMPAREEXPORT, MASSPROP on regions (#510), autosave/recovery, AUDIT, RECOVER (#406), OPTIONS (#23); no SPELL (open PR #551), ETRANSMIT | [gaps](gaps.md#features) |
 | Parametric constraints | 2% | 50% | 20–30 | all 12 geometric and the dimensional constraints, own solver; DOF report, G2 Smooth, ellipse/spline/block geometry and CONSTRAINTINFER landed (#546) | [geometry-parity](geometry-parity.md#constraint-solver--50) |
-| 3D modelling, visualisation, rendering | 5% | 2% | 300–450 | no UCS, 3D views, orbit, solids, surfaces, meshes, sections, visual styles, materials, lights or rendering; 150 of the 491 menu items | [gaps](gaps.md#features) |
+| 3D modelling, visualisation, rendering | 5% | 20% | 200–330 | 3D solids as closed meshes ([solids.md](solids.md)): primitives, EXTRUDE, REVOLVE, SWEEP, LOFT, POLYSOLID, booleans, FILLETEDGE/CHAMFEREDGE, SOLIDEDIT Shell/Separate/Check, 3DMOVE/3DROTATE/MIRROR3D/3DARRAY/3DALIGN, SLICE, INTERFERE, MASSPROP, a shaded RENDER picture and window, STL/3MF read and write, STEP write; no UCS, 3D views or orbit in the drawing area, visual styles, surfaces, meshes, sections, face editing, materials or lights, no ACIS; 150 of the 491 menu items | [gaps](gaps.md#features) |
 | Collaboration and cloud (Sheet Set Manager, Share, Traces, Markup Import, Activity Insights, DWG Compare) | 2% | 5% | 40–70 | none of these exist | [gaps](gaps.md#features) |
-| **Features dimension** | 100% | **≈ 41%** | **735–1,115** | | |
+| **Features dimension** | 100% | **≈ 42%** | **635–995** | | |
 
 ## By dimension (ready for real work)
 
@@ -192,7 +192,7 @@ far more: the next day external contributors found and fixed about 60 correctnes
 small PR with a regression test, and the audits in this pass found dozens of prompt options that
 only print "not available yet". The rates used here are: an option or bug fix 0.3–0.7 h; a
 moderate feature (object snap tracking, editable dynamic input, a dialog) 2–5 h; a subsystem
-(xrefs, dynamic blocks, AutoLISP, plot styles) 15–100 h; the 3D kernel 300–450 h; then a 1.3×
+(xrefs, dynamic blocks, AutoLISP, plot styles) 15–100 h; 3D 200–330 h; then a 1.3×
 tail factor for verification against AutoCAD.
 
 **Why the total went up.** The 2026-10-07 roadmap put full parity at ≈ 29% with ≈ 570 h left,
@@ -223,6 +223,7 @@ DWG/DXF corpus (files from people who own them); black-box checks in AutoCAD of 
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | 3D modelling 2% → 20% (3D solids: kernel, modeling and editing commands, STL/3MF/STEP); features dimension ≈ 41% → ≈ 42%, 735–1,115 h → 635–995 h; other rows not re-measured |
 | 2026-10-24 | minor | Inquiry and utilities row: COMPAREEXPORT exports a comparison to a new drawing; parity percentages and hours not re-measured |
 | 2026-10-22 | minor | Draw row: RECTANG gained a centre construction mode (`Center` keyword, `center: true`) beside its corner mode (#1127); parity percentages and hours not re-measured |
 | 2026-10-12 | minor | Hatch row evidence: Hatch and Gradient / Hatch Edit dialogs; percentages and hours not re-measured |
