@@ -128,9 +128,15 @@ walls; a wall too thick for the solid (its inside would fold over) is refused.
   (faces past `ceiling`, 85°, are ceilings, not overhangs); and the faces (of at least 0.01 mm²) that start in mid air
   with nothing of the solid under them (including roofs that can only bridge). `ok` is true
   when it finds nothing; `problems` says what it found, in words.
-- RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid)
+- RENDER `{handles?, view?, up?, width?, height?, edges?, path?}` (default: every visible solid)
   draws a shaded picture of the solids (default south-east isometric; `top`, `front`, `right`,
   `se`, `nw` … or any direction): the way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
+  `up` (default `[0,0,1]`) is the model's up, drawn up in the picture, so a part built Y up
+  (X along, Y up) renders standing with `up: [0,1,0]` instead of being turned
+  90° about X for each picture. The named views turn with `up` by the least rotation taking Z to
+  it: with Y up, `front` looks from +Z, `right` from +X, `top` from +Y and `se` from
+  `[1,1,1]`, the picture the part turned Z up would give. A `view` given as a direction stays
+  in the drawing's own coordinates.
   Typed or chosen from a menu, RENDER (and 3DORBIT, the tool bar's Orbit) opens the Render window: the solids shaded, preset view
   buttons, drag the picture to orbit; it follows the drawing as you edit.
 

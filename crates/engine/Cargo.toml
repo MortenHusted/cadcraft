@@ -30,3 +30,5 @@ libc = "0.2"
 [dev-dependencies]
 # Real DXF files for the external reference tests (io is a lower layer).
 cadcraft-io = { workspace = true }
+# Reading back the pictures RENDER writes.
+tiny-skia = { workspace = true }

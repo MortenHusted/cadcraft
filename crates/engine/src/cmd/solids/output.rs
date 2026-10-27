@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("render", "Render", run_render)
             .menu(&["View", "Render", "Render"])
             .alias(&["rr"])
-            .params("{handles?: solids (default: every visible solid in model space), view?: top|bottom|front|back|left|right|se|sw|ne|nw (default se) | [x,y,z] (towards the viewer), width?: 1200, height?: 900, edges?: true, path?: \"NAME.png\" (else base64 `data`)} → a shaded PNG of the solids")
+            .params("{handles?: solids (default: every visible solid in model space), view?: top|bottom|front|back|left|right|se|sw|ne|nw (default se) | [x,y,z] (towards the viewer), up?: [x,y,z] (default [0,0,1]: the drawing's up, up in the picture; the named views turn with it, so with [0,1,0] front looks from +Z and top from +Y), width?: 1200, height?: 900, edges?: true, path?: \"NAME.png\" (else base64 `data`)} → a shaded PNG of the solids")
             .noundo(),
         CommandSpec::new("printcheck", "3D Print Check", run_printcheck)
             .params("{handles?: solids (default: the selection), limit?: degrees from vertical an overhang may lean (default 46), ceiling?: degrees past which a face is a ceiling, not an overhang (default 85), maxOverhang?: overhang area allowed (default 150), bed?: [x,y,z] build volume} → per solid: closed, size, bedContact, overhangArea and bands by height, floating faces, problems; `ok` when nothing was found")
@@ -185,9 +185,20 @@ fn write_solids(s: &mut Session, cmd: &str, p: &Value, formats: &[&str]) -> Resu
     Ok(json!({ "path": path, "bytes": bytes.len(), "solids": solids.len(), "open": open, "message": message }))
 }
 
-/// The direction a named view looks from (AutoCAD's preset 3D views), or a direction `[x,y,z]`.
-fn view_direction(p: &Value) -> Result<(String, cadcraft_geom::Vec3)> {
+/// `up`: the drawing's up, which is up in the picture (default Z).
+fn up_direction(p: &Value) -> Result<cadcraft_geom::Vec3> {
     use cadcraft_geom::Vec3;
+    match super::point3("render", p, "up")? {
+        None => Ok(Vec3::Z),
+        Some(u) => Some(u.normalized()).filter(|u| *u != Vec3::ZERO).ok_or_else(|| bad("render", "`up` must be a non-zero direction [x,y,z]")),
+    }
+}
+
+/// The direction a named view looks from (AutoCAD's preset 3D views, turned with `up` when the
+/// drawing's up is not Z), or a direction `[x,y,z]` in the drawing's own coordinates.
+fn view_direction(p: &Value, up: cadcraft_geom::Vec3) -> Result<(String, cadcraft_geom::Vec3)> {
+    use cadcraft_geom::Vec3;
+    use cadcraft_render::shade::from_z_up;
     let named = |n: &str| -> Option<Vec3> {
         Some(match n {
             "top" => Vec3::Z,
@@ -204,12 +215,12 @@ fn view_direction(p: &Value) -> Result<(String, cadcraft_geom::Vec3)> {
         })
     };
     match p.get("view") {
-        None | Some(Value::Null) => Ok(("se".into(), Vec3::new(1.0, -1.0, 1.0))),
+        None | Some(Value::Null) => Ok(("se".into(), from_z_up(Vec3::new(1.0, -1.0, 1.0), up))),
         Some(Value::String(n)) => {
             let n = n.trim().to_ascii_lowercase();
             let d = named(&n)
                 .ok_or_else(|| bad("render", "`view` must be top, bottom, front, back, left, right, se, sw, ne, nw or a direction [x,y,z]"))?;
-            Ok((n, d))
+            Ok((n, from_z_up(d, up)))
         }
         Some(v) => {
             let d = super::point3_value(v).filter(|d| d.len() > 1e-12).ok_or_else(|| bad("render", "`view` must be a non-zero direction [x,y,z]"))?;
@@ -235,7 +246,8 @@ fn solid_rgb(d: &Drawing, c: &Common) -> cadcraft_color::Rgb {
 
 fn run_render(s: &mut Session, p: &Value) -> Result<Value> {
     use cadcraft_render::shade::{MAX_SIDE, ShadeItem, ShadeOptions, shade_png};
-    let (name, view) = view_direction(p)?;
+    let up = up_direction(p)?;
+    let (name, view) = view_direction(p, up)?;
     let side = |key: &str, default: u32| -> Result<u32> {
         match p.get(key) {
             None | Some(Value::Null) => Ok(default),
@@ -264,9 +276,9 @@ fn run_render(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad("render", "there are no visible 3D solids to render"));
     }
     let items: Vec<ShadeItem> = solids.iter().map(|(color, so)| ShadeItem { mesh: so.mesh(), color: *color }).collect();
-    let o = ShadeOptions { width, height, view, edges: super::super::bool_or(p, "edges", true), ..ShadeOptions::default() };
+    let o = ShadeOptions { width, height, view, up, edges: super::super::bool_or(p, "edges", true), ..ShadeOptions::default() };
     let png = shade_png(&items, &o).ok_or_else(|| bad("render", "the picture could not be made"))?;
-    let out = json!({ "width": width, "height": height, "view": name, "solids": items.len(), "bytes": png.len() });
+    let out = json!({ "width": width, "height": height, "view": name, "up": [up.x, up.y, up.z], "solids": items.len(), "bytes": png.len() });
     match str_param(p, "path").map(str::trim).filter(|x| !x.is_empty()) {
         Some(path) => {
             super::super::exchange::write_file("render", path, &png)?;

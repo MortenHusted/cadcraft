@@ -286,6 +286,25 @@ fn a_lazy_bridge_starts_without_the_app_and_says_how_to_open_it() {
     app.join().unwrap();
 }
 
+/// A part built Y up: `up` turns the 3D picture, `up` alone asks for the south-east one, and a
+/// zero `up` is a tool error.
+#[test]
+fn render_with_up_draws_a_part_built_y_up() {
+    let mut s = Server::new(Box::new(Headless::default()));
+    tool(&mut s, "execute", json!({"command": "box", "params": {"corner": [0, 0, 0], "opposite": [10, 30, 5]}}));
+    let size = |mut a: Value| {
+        a["width"] = json!(64);
+        a["height"] = json!(64);
+        a
+    };
+    let y_up = tool(&mut s, "render", size(json!({"view": "se", "up": [0, 1, 0]})));
+    assert_eq!(y_up["type"], "image");
+    assert_eq!(tool(&mut s, "render", size(json!({"up": [0, 1, 0]})))["data"], y_up["data"]);
+    assert_ne!(tool(&mut s, "render", size(json!({"view": "se"})))["data"], y_up["data"]);
+    let bad = call(&mut s, 7, "tools/call", json!({"name": "render", "arguments": {"up": [0, 0, 0]}}));
+    assert_eq!(bad["result"]["isError"], json!(true), "{bad}");
+}
+
 /// A `view` given as null is no view: the 2D picture of the drawing.
 #[test]
 fn render_with_a_null_view_draws_the_drawing() {

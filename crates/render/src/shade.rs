@@ -6,8 +6,8 @@
 //! Drawn at twice the size and averaged down, so edges are smooth.
 
 use cadcraft_color::Rgb;
-use cadcraft_geom::Vec3;
 use cadcraft_geom::solid::{FEATURE_ANGLE, Mesh};
+use cadcraft_geom::{Mat4, Vec3};
 use tiny_skia::{IntSize, Pixmap};
 
 /// Samples per pixel along each axis.
@@ -28,6 +28,8 @@ pub struct ShadeOptions {
     pub height: u32,
     /// Direction from the model towards the viewer (e.g. `[1, -1, 1]`: south-east isometric).
     pub view: Vec3,
+    /// The drawing's up, which is up in the picture: Z, or Y for a model built Y up.
+    pub up: Vec3,
     pub edges: bool,
     pub background: Rgb,
     pub edge_color: Rgb,
@@ -39,10 +41,26 @@ impl Default for ShadeOptions {
             width: 1200,
             height: 900,
             view: Vec3::new(1.0, -1.0, 1.0),
+            up: Vec3::Z,
             edges: true,
             background: Rgb(255, 255, 255),
             edge_color: Rgb(40, 44, 52),
         }
+    }
+}
+
+/// `v`, a direction in a drawing with Z up, for a drawing with `up` up: turned by the least
+/// rotation taking Z to `up` (half a turn about X when `up` is -Z). With Y up, -Y (the front)
+/// becomes +Z and Z (the top) becomes +Y.
+pub fn from_z_up(v: Vec3, up: Vec3) -> Vec3 {
+    let up = up.normalized();
+    let axis = Vec3::Z.cross(up);
+    if axis.normalized() != Vec3::ZERO {
+        Mat4::rotate_about_axis(Vec3::ZERO, axis, axis.len().atan2(up.z)).apply_vec(v)
+    } else if up.z < 0.0 {
+        Vec3::new(v.x, -v.y, -v.z)
+    } else {
+        v
     }
 }
 
@@ -54,10 +72,12 @@ struct Camera {
 }
 
 impl Camera {
-    fn new(view: Vec3) -> Camera {
+    fn new(view: Vec3, up: Vec3) -> Camera {
         let back = if view.len() > 1e-12 { view.normalized() } else { Vec3::new(1.0, -1.0, 1.0).normalized() };
-        // Z is up on screen, unless looking straight along it (plan views: Y is up).
-        let world_up = if back.cross(Vec3::Z).len() < 1e-6 { Vec3::Y } else { Vec3::Z };
+        let up = Some(up.normalized()).filter(|u| *u != Vec3::ZERO).unwrap_or(Vec3::Z);
+        // `up` is up on screen, unless looking straight along it (plan views: Y, turned with
+        // `up`, is up).
+        let world_up = if back.cross(up).len() < 1e-6 { from_z_up(Vec3::Y, up) } else { up };
         let right = world_up.cross(back).normalized();
         Camera { right, up: back.cross(right), back }
     }
@@ -154,7 +174,7 @@ fn line(cv: &mut Canvas, a: Vec3, b: Vec3, width: f64, color: [u8; 3], bias: f32
 /// A shaded picture of `items` (`None` for a picture size of zero).
 pub fn shade(items: &[ShadeItem], o: &ShadeOptions) -> Option<Pixmap> {
     let (out_w, out_h) = (o.width.clamp(1, MAX_SIDE), o.height.clamp(1, MAX_SIDE));
-    let cam = Camera::new(o.view);
+    let cam = Camera::new(o.view, o.up);
     let mut lo = Vec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
     let mut hi = -lo;
     for it in items {
@@ -251,6 +271,34 @@ mod tests {
         let c = px.pixel(32, 32).unwrap();
         assert!(c.green() > 0 && c.blue() == 0, "{c:?}");
         assert!(shade_png(&items, &o).is_some_and(|b| b.starts_with(&[0x89, b'P', b'N', b'G'])));
+    }
+
+    #[test]
+    fn from_z_up_turns_directions_with_up() {
+        let near = |a: Vec3, b: Vec3| assert!(a.dist(b) < 1e-12, "{a:?} vs {b:?}");
+        // Y up: the front (-Y) is seen from +Z, the top from +Y, and right stays right.
+        near(from_z_up(-Vec3::Y, Vec3::Y), Vec3::Z);
+        near(from_z_up(Vec3::Z, Vec3::Y), Vec3::Y);
+        near(from_z_up(Vec3::X, Vec3::Y), Vec3::X);
+        // Z goes to `up` whichever way it points; Z, or no up at all, changes nothing.
+        for up in [Vec3::X, -Vec3::X, Vec3::new(1.0, 2.0, -3.0), -Vec3::Z] {
+            near(from_z_up(Vec3::Z, up), up.normalized());
+        }
+        let se = Vec3::new(1.0, -1.0, 1.0);
+        near(from_z_up(se, Vec3::Z), se);
+        near(from_z_up(se, Vec3::ZERO), se);
+    }
+
+    #[test]
+    fn up_is_up_in_the_picture() {
+        // A post along Y, seen from +X: standing with Y up, lying down with Z up.
+        let m = cuboid(Vec3::ZERO, Vec3::new(2.0, 10.0, 2.0)).unwrap();
+        let red_at = |up: Vec3, x: u32, y: u32| {
+            let o = ShadeOptions { width: 100, height: 100, view: Vec3::X, up, edges: false, ..ShadeOptions::default() };
+            shade(&[ShadeItem { mesh: &m, color: Rgb(200, 0, 0) }], &o).unwrap().pixel(x, y).unwrap().green() == 0
+        };
+        assert!(red_at(Vec3::Y, 50, 10) && !red_at(Vec3::Y, 10, 50));
+        assert!(red_at(Vec3::Z, 10, 50) && !red_at(Vec3::Z, 50, 10));
     }
 
     #[test]

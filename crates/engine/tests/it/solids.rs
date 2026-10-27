@@ -196,6 +196,53 @@ fn move_rotate_and_mirror_in_3d() {
     near(solid(&s, &copy).mass_props().volume, 6000.0, 1e-6);
 }
 
+/// The fraction of pixels in which two pictures of the same size differ visibly.
+fn differing(a: &tiny_skia::Pixmap, b: &tiny_skia::Pixmap) -> f64 {
+    assert_eq!((a.width(), a.height()), (b.width(), b.height()));
+    let visibly = |p: &tiny_skia::PremultipliedColorU8, q: &tiny_skia::PremultipliedColorU8| {
+        [p.red().abs_diff(q.red()), p.green().abs_diff(q.green()), p.blue().abs_diff(q.blue())].iter().any(|d| *d > 24)
+    };
+    a.pixels().iter().zip(b.pixels()).filter(|(p, q)| visibly(p, q)).count() as f64 / a.pixels().len() as f64
+}
+
+/// RENDER with `up` [0,1,0] draws a part built Y up standing: the picture of the same part turned
+/// Z up (90° about X) and drawn with Z up, for the named views too.
+#[test]
+fn render_up_draws_a_part_built_y_up_standing() {
+    let mut s = Session::new();
+    // An L bracket built Y up: a base along X, a wall rising in Y at its left, a block on the base
+    // at its front (+Z).
+    let parts: Vec<String> = [([0, 0, 0], [40, 5, 20]), ([0, 0, 0], [5, 30, 20]), ([30, 5, 15], [40, 12, 20])]
+        .iter()
+        .map(|(a, b)| handle(&run(&mut s, "box", json!({"corner": a, "opposite": b}))))
+        .collect();
+    let dir = std::env::temp_dir().join(format!("cadcraft-render-up-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let picture = |s: &mut Session, name: &str, mut p: Value| {
+        let path = dir.join(name);
+        p["path"] = json!(path.to_str().unwrap());
+        p["width"] = json!(240);
+        p["height"] = json!(180);
+        let r = run(s, "render", p);
+        (r, tiny_skia::Pixmap::load_png(&path).unwrap())
+    };
+    let (r, y_se) = picture(&mut s, "y-se.png", json!({"up": [0, 1, 0]}));
+    assert_eq!(r["picture"]["up"], json!([0.0, 1.0, 0.0]), "{r}");
+    let (_, y_front) = picture(&mut s, "y-front.png", json!({"view": "front", "up": [0, 2, 0]}));
+    let (_, sideways) = picture(&mut s, "sideways.png", json!({}));
+    run(&mut s, "3drotate", json!({"handles": parts, "axis": "x", "angle": 90}));
+    let (_, z_se) = picture(&mut s, "z-se.png", json!({"view": "se"}));
+    let (_, z_front) = picture(&mut s, "z-front.png", json!({"view": "front", "up": [0, 0, 1]}));
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(differing(&y_se, &z_se) < 0.005, "{}", differing(&y_se, &z_se));
+    assert!(differing(&y_front, &z_front) < 0.005, "{}", differing(&y_front, &z_front));
+    assert!(differing(&sideways, &z_se) > 0.05, "without `up` the part lies on its side");
+    for up in [json!([0, 0, 0]), json!([1e-300, 0, 0]), json!([f64::MAX, f64::MAX, f64::MAX]), json!("y")] {
+        let e = s.execute("render", &json!({"up": up})).unwrap_err().to_string();
+        assert!(e.contains("`up`"), "{e}");
+    }
+}
+
 #[test]
 fn slice_cuts_a_solid_in_two() {
     let mut s = Session::new();

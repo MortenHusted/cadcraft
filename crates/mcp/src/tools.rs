@@ -22,10 +22,11 @@ pub fn tool_definitions(has_ui: bool) -> Value {
             "inputSchema": {"type": "object", "properties": {"type": {"type": "string"}, "layer": {"type": "string"}, "selected": {"type": "boolean"},
                 "window": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "minItems": 2, "maxItems": 2},
                 "crossing": {"type": "boolean"}, "limit": {"type": "integer", "minimum": 0}, "offset": {"type": "integer", "minimum": 0}}}}),
-        json!({"name": "render", "description": "Render the active drawing to a PNG and return it as an image: fitted to the extents by default, or just the area `window` [[x0,y0],[x1,y1]] (drawing units), e.g. one sheet or one room of a large drawing. With a window and no size the image is 1600 px wide with the window's shape. With `view` (top, bottom, front, back, left, right, se, sw, ne, nw, or a direction [x,y,z] towards the viewer) it is instead a shaded 3D picture of the 3D solids, with their edges.",
+        json!({"name": "render", "description": "Render the active drawing to a PNG and return it as an image: fitted to the extents by default, or just the area `window` [[x0,y0],[x1,y1]] (drawing units), e.g. one sheet or one room of a large drawing. With a window and no size the image is 1600 px wide with the window's shape. With `view` (top, bottom, front, back, left, right, se, sw, ne, nw, or a direction [x,y,z] towards the viewer) it is instead a shaded 3D picture of the 3D solids, with their edges. `up` [x,y,z] (default [0,0,1]) is the model's up, up in the picture: [0,1,0] for a part built Y up, which turns the named views with it (front looks from +Z, top from +Y); `up` without `view` is the south-east view.",
             "inputSchema": {"type": "object", "properties": {"width": {"type": "integer", "minimum": 16}, "height": {"type": "integer", "minimum": 16}, "fit": {"type": "boolean"},
                 "window": {"type": "array", "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}, "minItems": 2, "maxItems": 2},
                 "view": {"anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}]},
+                "up": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3},
                 "path": {"type": "string"}}}}),
         json!({"name": "find_text", "description": "Read the drawing's texts: TEXT, MTEXT (formatting removed), block attributes and multileaders, each with its text, insertion point `at`, height, rotation, style, layer and handle. Filter by `contains` (any case), `layer` and/or `window` [[x0,y0],[x1,y1]] around the insertion points; page with offset and limit (default 200). Use it to find room names, sheet titles and notes without reading all the geometry.",
             "inputSchema": {"type": "object", "properties": {"contains": {"type": "string"}, "layer": {"type": "string"},
@@ -138,9 +139,9 @@ pub fn call_tool(b: &mut dyn Backend, name: &str, args: &Value) -> Result<Value,
         "screenshot" => b.call("ui.screenshot", a),
         "ui_inspect" => b.call("ui.inspect", json!({})),
         "ui_click" => b.call("ui.pointer", a),
-        // A view asks for the shaded 3D picture of the solids (the RENDER command).
-        "render" if a.get("view").is_some_and(|v| !v.is_null()) => {
-            let params = json!({"view": a.get("view"), "width": a.get("width"), "height": a.get("height"), "path": a.get("path")});
+        // A view or an up asks for the shaded 3D picture of the solids (the RENDER command).
+        "render" if ["view", "up"].iter().any(|k| a.get(*k).is_some_and(|v| !v.is_null())) => {
+            let params = json!({"view": a.get("view"), "up": a.get("up"), "width": a.get("width"), "height": a.get("height"), "path": a.get("path")});
             return Ok(match b.call("engine.execute", json!({"command": "render", "params": params})) {
                 Ok(v) => match v.get("data").and_then(Value::as_str) {
                     Some(data) => json!({"content": [{"type": "image", "data": data, "mimeType": "image/png"}]}),
