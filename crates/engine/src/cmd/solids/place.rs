@@ -154,7 +154,7 @@ fn lift(k: &mut EntityKind, dz: f64) -> bool {
 
 /// `kind` transformed by `m`, or `None` for an object `m` would take out of plan (or a solid
 /// out of range). A move straight up or down raises the objects that have a height.
-fn transformed(kind: &EntityKind, m: &Mat4) -> Option<EntityKind> {
+pub(crate) fn transformed(kind: &EntityKind, m: &Mat4) -> Option<EntityKind> {
     let mut k = kind.clone();
     match &mut k {
         EntityKind::Solid3d(so) => so.transform(m).then_some(())?,

@@ -27,7 +27,7 @@ mod solidedit;
 mod sweep;
 
 pub(crate) use output::massprop;
-pub(crate) use place::combine;
+pub(crate) use place::{combine, transformed};
 
 pub fn specs() -> Vec<CommandSpec> {
     [create::specs(), sweep::specs(), loft::specs(), place::specs(), edges::specs(), solidedit::specs(), output::specs()]

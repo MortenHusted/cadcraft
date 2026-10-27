@@ -1,31 +1,50 @@
 use super::*;
+use cadcraft_geom::{Mat4, Vec3};
 
 // ---------------- core operations ----------------
 
 pub(crate) fn transform_entities(s: &mut Session, hs: &[Handle], m: &Mat3, copy: bool) -> Result<Vec<Handle>> {
+    if copy {
+        return copy_entities(s, hs, |k| {
+            k.transform(m);
+            true
+        })
+        .map(|(made, _)| made);
+    }
     let d = s.doc_mut()?;
     let mut out = Vec::new();
     for h in hs {
-        let Some(sp) = d.space_of(*h) else { continue };
-        if copy {
-            let Some(e) = d.entity(*h).map(|e| (**e).clone()) else { continue };
-            let nh = d.new_handle();
-            let mut ne = Entity { handle: nh, ..e };
-            ne.kind.transform(m);
-            if let Some(st) = d.space_mut(&sp) {
-                st.push(ne);
-                out.push(nh);
-            }
-        } else {
-            let locked = d.entity(*h).and_then(|e| d.layer(&e.common.layer)).is_some_and(|l| l.locked);
-            if locked {
-                continue;
-            }
-            d.modify_entity(*h, |e| e.kind.transform(m))?;
-            out.push(*h);
+        if d.space_of(*h).is_none() {
+            continue;
         }
+        let locked = d.entity(*h).and_then(|e| d.layer(&e.common.layer)).is_some_and(|l| l.locked);
+        if locked {
+            continue;
+        }
+        d.modify_entity(*h, |e| e.kind.transform(m))?;
+        out.push(*h);
     }
     Ok(out)
+}
+
+/// Copies of `hs` in their own spaces, each changed by `place` (false: that one is not copied).
+/// The new handles, and how many `place` refused.
+fn copy_entities(s: &mut Session, hs: &[Handle], place: impl Fn(&mut EntityKind) -> bool) -> Result<(Vec<Handle>, usize)> {
+    let d = s.doc_mut()?;
+    let (mut out, mut refused) = (Vec::new(), 0);
+    for h in hs {
+        let (Some(sp), Some(mut e)) = (d.space_of(*h), d.entity(*h).map(|e| (**e).clone())) else { continue };
+        if !place(&mut e.kind) {
+            refused += 1;
+            continue;
+        }
+        let nh = d.new_handle();
+        if let Some(st) = d.space_mut(&sp) {
+            st.push(Entity { handle: nh, ..e });
+            out.push(nh);
+        }
+    }
+    Ok((out, refused))
 }
 
 pub(super) fn erase(s: &mut Session, hs: &[Handle]) -> Result<usize> {
@@ -63,15 +82,36 @@ pub(super) fn run_move(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "moved": moved.len() }))
 }
 
+/// COPY's displacement: `delta` ([dx,dy] or [dx,dy,dz]) or `to` − `from` (with or without z).
+fn delta3_of(cmd: &str, p: &Value) -> Result<Vec3> {
+    let point = |key: &str| p.get(key).and_then(|v| crate::cmd::solids::point3_value(v).or_else(|| crate::cmd::point_value(v).map(|q| q.to3(0.0))));
+    if let Some(d) = point("delta") {
+        return Ok(d);
+    }
+    let a = point("from").ok_or_else(|| bad(cmd, "`from` ([x, y] or [x, y, z]) is required"))?;
+    let b = point("to").ok_or_else(|| bad(cmd, "`to` ([x, y] or [x, y, z]) is required"))?;
+    Ok(b - a)
+}
+
 pub(super) fn run_copy(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = targets(s, p)?;
-    let d = delta_of("copy", p)?;
+    let d = delta3_of("copy", p)?;
     let n = p.get("count").and_then(Value::as_u64).unwrap_or(1).clamp(1, 10_000);
-    let mut out = Vec::new();
-    for k in 1..=n {
-        out.extend(transform_entities(s, &hs, &Mat3::translate(d * k as f64), true)?.into_iter().map(|h| h.hex()));
+    let (mut out, mut skipped) = (Vec::new(), 0);
+    for i in 1..=n {
+        let step = d * i as f64;
+        let (made, refused) = if d.z == 0.0 {
+            (transform_entities(s, &hs, &Mat3::translate(step.xy()), true)?, 0)
+        } else {
+            // Up or down too: 3D solids move in 3D and objects with a height of their own are
+            // raised or lowered, as 3DMOVE moves them; the others are skipped.
+            let m = Mat4::translate(step);
+            copy_entities(s, &hs, |k| crate::cmd::solids::transformed(k, &m).map(|t| *k = t).is_some())?
+        };
+        out.extend(made.into_iter().map(|h| h.hex()));
+        skipped += refused;
     }
-    Ok(json!({ "handles": out }))
+    Ok(json!({ "handles": out, "skipped": skipped }))
 }
 
 pub(super) fn run_rotate(s: &mut Session, p: &Value) -> Result<Value> {

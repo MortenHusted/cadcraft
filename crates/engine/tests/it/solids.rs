@@ -197,6 +197,44 @@ fn move_rotate_and_mirror_in_3d() {
 }
 
 #[test]
+fn copy_takes_a_3d_displacement() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 20, 30]})));
+    let line = handle(&run(&mut s, "line", json!({"points": [[0, 0], [5, 0]]})));
+    let sp = handle(&run(&mut s, "spline", json!({"fit": [[0, 0], [5, 5], [10, 0]]})));
+    // Two copies 40 up: the box in 3D, the line raised; the spline has no height of its own.
+    let r = run(&mut s, "copy", json!({"handles": [b, line, sp], "delta": [1, 2, 40], "count": 2}));
+    let made: Vec<String> = r["handles"].as_array().unwrap().iter().map(|h| h.as_str().unwrap().to_string()).collect();
+    assert_eq!((made.len(), r["skipped"].as_u64()), (4, Some(2)), "{r}");
+    for (k, (boxed, raised)) in [(&made[0], &made[1]), (&made[2], &made[3])].into_iter().enumerate() {
+        let n = (k + 1) as f64;
+        let bb = solid(&s, boxed).bounds();
+        assert_eq!((bb.min.x, bb.min.y, bb.min.z, bb.max.z), (n, 2.0 * n, 40.0 * n, 30.0 + 40.0 * n));
+        match &s.doc().unwrap().entity(Handle::parse_hex(raised).unwrap()).unwrap().kind {
+            EntityKind::Line(l) => assert_eq!((l.a.x, l.a.z, l.b.z), (n, 40.0 * n, 40.0 * n)),
+            k => panic!("{}", k.type_name()),
+        }
+    }
+    assert_eq!(solid(&s, &b).bounds().min.z, 0.0, "the original stays");
+    // From and to in 3D, or one of them in plan (z 0).
+    let r = run(&mut s, "copy", json!({"handles": [b], "from": [0, 0, 10], "to": [0, 0, 5]}));
+    assert_eq!(solid(&s, &handle(&r)).bounds().min.z, -5.0);
+    let r = run(&mut s, "copy", json!({"handles": [b], "from": [0, 0], "to": [3, 0, 5]}));
+    let bb = solid(&s, &handle(&r)).bounds();
+    assert_eq!((bb.min.x, bb.min.z), (3.0, 5.0));
+    // Without a dz, a copy in plan as before: the spline too.
+    let r = run(&mut s, "copy", json!({"handles": [sp], "delta": [0, 10, 0]}));
+    assert_eq!((r["handles"].as_array().unwrap().len(), r["skipped"].as_u64()), (1, Some(0)), "{r}");
+    let e = s.execute("copy", &json!({"handles": [b], "from": [0, 0, 0]})).unwrap_err().to_string();
+    assert!(e.contains("`to`"), "{e}");
+    // A second copy 1e308 up would be at infinity: refused, the drawing as it was.
+    let count = s.doc().unwrap().model.len();
+    let e = s.execute("copy", &json!({"handles": [line], "delta": [0, 0, 1e308], "count": 2})).unwrap_err().to_string();
+    assert!(e.contains("too large"), "{e}");
+    assert_eq!(s.doc().unwrap().model.len(), count);
+}
+
+#[test]
 fn slice_cuts_a_solid_in_two() {
     let mut s = Session::new();
     let b = handle(&run(&mut s, "sphere", json!({"center": [0, 0, 0], "radius": 5})));

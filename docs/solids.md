@@ -52,6 +52,7 @@ it to 0.6 outside, its root well inside the core:
 | UNION, INTERSECT | `{handles}`: the first solid takes the result (and keeps its handle) |
 | SUBTRACT | `{from: [handles], remove: [handles]}` |
 | 3DMOVE | `{handles, displacement}` or `{handles, from, to}` |
+| COPY | `{handles, delta: [dx, dy, dz], count?}` or `{handles, from, to}` with 3D points: copies moved in 3D (`skipped`: objects a copy up or down can't take) |
 | 3DROTATE | `{handles, base?, axis: "x" \| "y" \| "z" \| [x,y,z], angle}` (degrees) |
 | MIRROR3D | `{handles, plane: "xy" \| "yz" \| "zx" \| normal, point?, erase?}` (keeps the originals by default) |
 | 3DARRAY | `{handles, rows?, columns?, levels?, spacing: [dx, dy, dz]}`, or `{handles, polar: true, count, angle? (360), axis?, rotate? (true)}` round an axis through two points (default Z through the origin): the copies |
@@ -62,7 +63,10 @@ The booleans return `closed`: whether the result is one watertight solid. It is 
 where solids touch along an edge or at a point, which no closed mesh can represent. MOVE,
 ROTATE, SCALE and MIRROR also work on solids in plan; 3DMOVE, 3DROTATE and MIRROR3D move other
 objects only when the transform keeps them in plan, and 3DMOVE raises or lowers those that have
-a height of their own (lines, circles, arcs, polylines, text, points…).
+a height of their own (lines, circles, arcs, polylines, text, points…). COPY with a displacement
+in Z does the same to its copies, so a solid can be copied up or down in one step; objects
+without a height of their own (splines, regions, block references…) are skipped and counted in
+`skipped`. Without a Z it copies in plan, as for 2D drawings.
 
 ## Rounding and bevelling edges
 

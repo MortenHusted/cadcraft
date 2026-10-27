@@ -51,7 +51,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("copy", "Copy", run_copy)
             .menu(&["Modify", "Copy"])
             .alias(&["co", "cp"])
-            .params("{handles?, delta: [dx,dy] | from,to, count?: n}")
+            .params("{handles?, delta: [dx,dy] | [dx,dy,dz] | from,to (2D or 3D points), count?: n} → {handles, skipped}: with a dz, 3D solids are copied in 3D and objects with a height of their own (lines, circles, polylines, text…) raised or lowered, as 3DMOVE moves them; the others are skipped")
             .interactive(|_| Ok(Box::new(DisplaceM::new(Op::Copy)))),
         CommandSpec::new("rotate", "Rotate", run_rotate)
             .menu(&["Modify", "Rotate"])
