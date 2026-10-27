@@ -166,6 +166,12 @@ T-junctions split. Property tests check exact volumes and watertightness for tho
 box pairs on a coarse grid (coincident and touching faces) and inclusion-exclusion for rotated
 boxes, cylinders and spheres.
 
+Known weakness: meshes made elsewhere whose curved faces are tessellated into very long, thin
+triangles (strips a few hundredths of a millimetre wide, as some CAD exports on MakerWorld have)
+can make a boolean come out not closed (`closed: false`): cut points where such strips cross the
+other solid at shallow angles don't meet exactly. Solids made in CADCraft don't have such
+strips. Check the result (`solidedit.check`, PRINTCHECK) before printing a remixed download.
+
 ## Not yet
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
