@@ -36,6 +36,8 @@ fn yes() -> bool {
 }
 mod region;
 pub use region::*;
+mod solid3d;
+pub use solid3d::*;
 
 mod block;
 mod common;
@@ -85,6 +87,7 @@ pub enum EntityKind {
     Trace(Solid),
     Face3d(Face3d),
     Region(Region),
+    Solid3d(Solid3d),
     Viewport(Viewport),
     Image(Image),
     Wipeout(Wipeout),
@@ -139,6 +142,7 @@ impl EntityKind {
             EntityKind::Trace(_) => "Trace",
             EntityKind::Face3d(_) => "3D Face",
             EntityKind::Region(_) => "Region",
+            EntityKind::Solid3d(_) => "3D Solid",
             EntityKind::Viewport(_) => "Viewport",
             EntityKind::Image(_) => "Raster Image",
             EntityKind::Wipeout(_) => "Wipeout",
@@ -174,6 +178,7 @@ impl EntityKind {
             EntityKind::Trace(_) => "TRACE",
             EntityKind::Face3d(_) => "3DFACE",
             EntityKind::Region(_) => "REGION",
+            EntityKind::Solid3d(_) => "3DSOLID",
             EntityKind::Viewport(_) => "VIEWPORT",
             EntityKind::Image(_) => "IMAGE",
             EntityKind::Wipeout(_) => "WIPEOUT",
@@ -222,6 +227,12 @@ impl EntityKind {
                 pts.windows(2).filter_map(|w| Some(Prim::Seg(Segment::Line(GLine::new(*w.first()?, *w.get(1)?))))).collect()
             }
             EntityKind::Region(r) => r.segments().into_iter().map(Prim::Seg).collect(),
+            EntityKind::Solid3d(s) => s
+                .wire()
+                .iter()
+                .filter(|[a, b]| !a.xy().near(b.xy(), cadcraft_geom::EPS))
+                .map(|[a, b]| Prim::Seg(Segment::Line(GLine::new(a.xy(), b.xy()))))
+                .collect(),
             EntityKind::Hatch(h) => {
                 h.loops.iter().flat_map(|l| Polyline { vertices: l.vertices.clone(), closed: true }.segments()).map(Prim::Seg).collect()
             }
@@ -426,6 +437,7 @@ impl EntityKind {
             }
             EntityKind::Solid(so) | EntityKind::Trace(so) => so.corners.iter_mut().for_each(t3),
             EntityKind::Face3d(f) => f.corners.iter_mut().for_each(t3),
+            EntityKind::Solid3d(so) => so.transform_2d(m),
             EntityKind::Region(r) => {
                 for v in r.loops.iter_mut().flat_map(|l| l.vertices.iter_mut()) {
                     v.p = m.apply(v.p);
@@ -529,6 +541,7 @@ impl EntityKind {
             EntityKind::Solid(s) | EntityKind::Trace(s) => s.corners.iter().map(|c| c.xy()).collect(),
             EntityKind::Face3d(f) => f.corners.iter().map(|c| c.xy()).collect(),
             EntityKind::Region(r) => vec![r.bounds().center()],
+            EntityKind::Solid3d(s) => vec![s.bounds().xy().center()],
             EntityKind::Viewport(v) => {
                 let c = v.center.xy();
                 let h = Vec2::new(v.width / 2.0, v.height / 2.0);

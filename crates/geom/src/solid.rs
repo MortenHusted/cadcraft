@@ -252,8 +252,22 @@ impl Mesh {
 
     /// The edges a wireframe shows: where the faces meet at more than `angle_deg`, open edges,
     /// and the outline seen along `view` (where the surface turns from facing the viewer to
-    /// facing away).
+    /// facing away; a zero `view` gives no outline).
     pub fn wire_edges(&self, angle_deg: f64, view: Vec3) -> Vec<[Vec3; 2]> {
+        let mut out: Vec<[Vec3; 2]> = self
+            .shown_edges(angle_deg, view)
+            .into_iter()
+            .filter_map(|(a, b)| Some([*self.vertices.get(a as usize)?, *self.vertices.get(b as usize)?]))
+            .collect();
+        out.sort_by(|p, q| {
+            let key = |e: &[Vec3; 2]| [e[0].x, e[0].y, e[0].z, e[1].x, e[1].y, e[1].z];
+            key(p).iter().zip(key(q)).map(|(a, b)| a.total_cmp(&b)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        out
+    }
+
+    /// [`Mesh::wire_edges`] as vertex index pairs, lower index first, sorted.
+    pub fn shown_edges(&self, angle_deg: f64, view: Vec3) -> Vec<(u32, u32)> {
         let normal = |t: &[u32; 3]| self.corners(t).map(|[a, b, c]| (b - a).cross(c - a).normalized());
         let mut faces: HashMap<(u32, u32), Vec<Vec3>> = HashMap::new();
         for t in &self.triangles {
@@ -264,19 +278,17 @@ impl Mesh {
         }
         let cos_limit = angle_deg.to_radians().cos();
         let view = view.normalized();
-        let mut out: Vec<[Vec3; 2]> = faces
+        let outline = |n1: &Vec3, n2: &Vec3| view != Vec3::ZERO && (n1.dot(view) > 0.0) != (n2.dot(view) > 0.0);
+        let mut out: Vec<(u32, u32)> = faces
             .into_iter()
             .filter(|(_, ns)| match ns.as_slice() {
-                [n1, n2] => n1.dot(*n2) < cos_limit || (n1.dot(view) > 0.0) != (n2.dot(view) > 0.0),
+                [n1, n2] => n1.dot(*n2) < cos_limit || outline(n1, n2),
                 _ => true,
             })
-            .filter_map(|((a, b), _)| Some([*self.vertices.get(a as usize)?, *self.vertices.get(b as usize)?]))
+            .map(|(e, _)| e)
             .collect();
         // HashMap order varies from run to run; sort so drawings and files are reproducible.
-        out.sort_by(|p, q| {
-            let key = |e: &[Vec3; 2]| [e[0].x, e[0].y, e[0].z, e[1].x, e[1].y, e[1].z];
-            key(p).iter().zip(key(q)).map(|(a, b)| a.total_cmp(&b)).find(|o| o.is_ne()).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        out.sort_unstable();
         out
     }
 

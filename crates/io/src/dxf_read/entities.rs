@@ -493,7 +493,11 @@ pub(super) fn polyline_entity(recs: &[(String, Vec<Tag>)], i: &mut usize, t: &T)
     }
     let c = common(t);
     let mut extra: Vec<EntityKind> = Vec::new();
-    let k = if flags & (16 | 64) != 0 {
+    let k = if flags & 64 != 0 && crate::dxf_solid::part_of(t.0).is_some() {
+        // A polyface CADCraft wrote for a 3D solid (`dxf_solid`).
+        let verts: Vec<Vec3> = pts.iter().map(|p| p.0).collect();
+        EntityKind::Solid3d(crate::dxf_solid::solid(&verts, &faces))
+    } else if flags & (16 | 64) != 0 {
         // Polyface (64) and polygon (16) meshes become 3D faces; the first takes the
         // polyline's place.
         let verts: Vec<Vec3> = pts.iter().map(|p| p.0).collect();

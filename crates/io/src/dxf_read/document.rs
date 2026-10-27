@@ -61,6 +61,14 @@ pub(super) fn parse_entities(
                 None => d.new_handle(),
             };
             entity_extras(kind, tags, h, &mut k, rx);
+            // A big solid comes in consecutive parts: the later ones join the first.
+            if let EntityKind::Solid3d(part) = &k
+                && crate::dxf_solid::part_of(tags).is_some_and(|(n, _)| n > 0)
+                && let Some((_, _, Entity { kind: EntityKind::Solid3d(whole), .. })) = out.last_mut()
+            {
+                *whole = crate::dxf_solid::join(whole, part);
+                continue;
+            }
             let more: Vec<_> =
                 extra.into_iter().map(|f| (owner.clone(), paper, Entity { handle: d.new_handle(), common: c.clone(), kind: f })).collect();
             out.push((owner, paper, Entity { handle: h, common: c, kind: k }));

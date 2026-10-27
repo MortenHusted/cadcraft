@@ -54,6 +54,7 @@ mod plot_styles;
 mod region_roundtrip;
 mod roundtrip_audit;
 mod skipped_records;
+mod solid_roundtrip;
 mod sortents;
 mod spline_fit_data;
 mod split_entities_section;

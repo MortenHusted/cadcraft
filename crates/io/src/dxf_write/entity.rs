@@ -205,6 +205,53 @@ pub(super) fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: boo
             thickness(w, e);
             text_tags(w, d, t, None, None);
         }
+        // Polyface meshes (`dxf_solid`): 3DSOLID's own data is ACIS.
+        EntityKind::Solid3d(so) => {
+            let parts = crate::dxf_solid::parts(so);
+            let count = parts.len();
+            for (i, part) in parts.into_iter().enumerate() {
+                // The other parts get handles of their own (only the handle and properties are written).
+                let h = if i == 0 { e.handle } else { Handle::parse_hex(&w.h()).unwrap_or(e.handle) };
+                let pe = Entity { handle: h, common: e.common.clone(), kind: EntityKind::Point(Point { p: Vec3::ZERO, angle: 0.0 }) };
+                w.s(0, "POLYLINE");
+                common(w, &pe, owner, paper, "AcDbPolyFaceMesh");
+                w.i(66, 1);
+                w.p(10, Vec3::ZERO);
+                w.i(70, 64);
+                w.i(71, part.vertices.len() as i64);
+                w.i(72, part.faces.len() as i64);
+                w.xdata(crate::dxf_solid::xdata(i, count));
+                let vertex = |w: &mut W, subclass: &str, at: Vec3, flags: i64| {
+                    let vh = w.h();
+                    w.s(0, "VERTEX");
+                    w.s(5, vh);
+                    w.s(330, h.hex());
+                    w.s(100, "AcDbEntity");
+                    w.s(8, &e.common.layer);
+                    if subclass == "AcDbPolyFaceMeshVertex" {
+                        w.s(100, "AcDbVertex");
+                    }
+                    w.s(100, subclass);
+                    w.p(10, at);
+                    w.i(70, flags);
+                };
+                for q in &part.vertices {
+                    vertex(w, "AcDbPolyFaceMeshVertex", *q, 192);
+                }
+                for f in &part.faces {
+                    vertex(w, "AcDbFaceRecord", Vec3::ZERO, 128);
+                    w.i(71, f[0]);
+                    w.i(72, f[1]);
+                    w.i(73, f[2]);
+                }
+                let sh = w.h();
+                w.s(0, "SEQEND");
+                w.s(5, sh);
+                w.s(330, h.hex());
+                w.s(100, "AcDbEntity");
+                w.s(8, &e.common.layer);
+            }
+        }
         // Closed polylines, one per loop (`dxf_region`): REGION's own data is ACIS.
         EntityKind::Region(r) => {
             for (i, tags) in crate::dxf_region::polylines(r).into_iter().enumerate() {

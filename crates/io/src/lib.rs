@@ -9,11 +9,13 @@ mod dxf_ext;
 mod dxf_image;
 mod dxf_mleader;
 mod dxf_read;
+mod dxf_solid;
 mod dxf_table;
 mod dxf_write;
 mod dxf_xref;
 pub mod pdf;
 pub mod plotter;
+pub mod print3d;
 pub mod svg;
 mod svg_read;
 
@@ -125,6 +127,8 @@ pub fn write_framed(d: &Drawing, name: &str, window: Option<Bounds2>) -> Result<
         "svg" => Ok(svg::export_window(d, &Space::Model, window).into_bytes()),
         "png" => png_framed(d, &Space::Model, 2400, 1600, window),
         "pdf" => pdf::pdf(d, &Space::Model, &PdfOptions { compress: true, window, ..PdfOptions::default() }),
+        "stl" => print3d::stl(&print3d::solids(d, &Space::Model)),
+        "3mf" => print3d::three_mf(&print3d::solids(d, &Space::Model), print3d::unit_name(d)),
         e => Err(IoError::Unsupported(e.to_string())),
     }
 }
