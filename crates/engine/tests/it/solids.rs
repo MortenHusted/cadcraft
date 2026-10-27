@@ -604,6 +604,12 @@ fn solidedit_shells_separates_and_checks() {
     let r = run(&mut s, "solidedit.separate", json!({"handles": [d]}));
     assert_eq!(r["handles"].as_array().unwrap().len(), 2);
     assert_eq!(solids(&s).len(), 4);
+    // Too thick for a thin plate given after a block that could take it: neither changes.
+    let block = handle(&run(&mut s, "box", json!({"corner": [100, 0, 0], "opposite": [110, 10, 10]})));
+    let plate = handle(&run(&mut s, "box", json!({"corner": [120, 0, 0], "opposite": [130, 10, 1]})));
+    assert!(s.execute("solidedit.shell", &json!({"handles": [block, plate], "thickness": 2})).is_err());
+    near(solid(&s, &block).mass_props().volume, 1000.0, 1e-9);
+    run(&mut s, "erase", json!({"handles": [block, plate]}));
     for (p, why) in [
         (json!({"mode": "explode", "handles": [b]}), "`mode`"),
         (json!({"mode": "shell", "handles": [b]}), "`thickness`"),

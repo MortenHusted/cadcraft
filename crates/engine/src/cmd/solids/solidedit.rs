@@ -113,11 +113,14 @@ fn triangle_distance(p: Vec3, t: &[Vec3]) -> f64 {
 fn run_shell(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "solidedit";
     let t = number(CMD, p, "thickness")?.ok_or_else(|| bad(CMD, "`thickness` is required"))?;
-    let solids = target_solids(s, CMD, p)?;
-    let (mut handles, mut volumes) = (Vec::new(), Vec::new());
-    for (h, so) in solids {
+    // Hollow every solid before changing the drawing, so a failure leaves them all as they were.
+    let mut done = Vec::new();
+    for (h, so) in target_solids(s, CMD, p)? {
         let open = faces_to_open(CMD, so.mesh(), p.get("remove"))?;
-        let mesh = shell(so.mesh(), t, &open).map_err(|e| solid_error(CMD, e))?;
+        done.push((h, shell(so.mesh(), t, &open).map_err(|e| solid_error(CMD, e))?));
+    }
+    let (mut handles, mut volumes) = (Vec::new(), Vec::new());
+    for (h, mesh) in done {
         volumes.push(mesh.volume());
         s.doc_mut()?.modify_entity(h, |e| e.kind = EntityKind::Solid3d(Solid3d::new(mesh)))?;
         handles.push(hex(h));
