@@ -265,6 +265,56 @@ fn clean_loops(loops: &[Vec<Vec2>]) -> Result<Vec<Vec<Vec2>>, SolidError> {
     Ok(out)
 }
 
+/// Triangles covering the region the closed `loops` bound, counter-clockwise: a loop inside an
+/// odd number of others is a hole, whichever way each winds. Indices number the loops' points
+/// in order.
+pub(crate) fn cap(loops: &[Vec<Vec2>]) -> Result<Vec<[usize; 3]>, SolidError> {
+    let depth: Vec<usize> = loops
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            let probe = l.first().copied().unwrap_or(Vec2::ZERO);
+            loops.iter().enumerate().filter(|(j, o)| *j != i && point_in_polygon(o, probe)).count()
+        })
+        .collect();
+    // Each loop wound as the triangulation wants it (outer loops counter-clockwise, holes
+    // clockwise), with the index of each of its points.
+    let mut start = 0;
+    let mut wound: Vec<(Vec<Vec2>, Vec<usize>)> = Vec::with_capacity(loops.len());
+    for (l, d) in loops.iter().zip(&depth) {
+        let index: Vec<usize> = (start..start + l.len()).collect();
+        start += l.len();
+        wound.push(if (shoelace(l) > 0.0) != (d % 2 == 0) {
+            (l.iter().rev().copied().collect(), index.into_iter().rev().collect())
+        } else {
+            (l.clone(), index)
+        });
+    }
+    let mut out = Vec::new();
+    for (i, (outer, outer_index)) in wound.iter().enumerate() {
+        let d = depth.get(i).copied().unwrap_or(0);
+        if d % 2 == 1 {
+            continue;
+        }
+        // Holes one level deeper inside this outer loop.
+        let holes: Vec<&(Vec<Vec2>, Vec<usize>)> = wound
+            .iter()
+            .zip(&depth)
+            .filter(|((h, _), hd)| **hd == d + 1 && h.first().is_some_and(|p| point_in_polygon(outer, *p)))
+            .map(|(w, _)| w)
+            .collect();
+        let hole_pts: Vec<&[Vec2]> = holes.iter().map(|(h, _)| h.as_slice()).collect();
+        // The triangulation numbers the outer loop's points, then each hole's.
+        let map: Vec<usize> = outer_index.iter().chain(holes.iter().flat_map(|(_, ix)| ix)).copied().collect();
+        for t in triangulate_with_holes(outer, &hole_pts)? {
+            if let (Some(a), Some(b), Some(c)) = (map.get(t[0]), map.get(t[1]), map.get(t[2])) {
+                out.push([*a, *b, *c]);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// A planar profile split into faces: each outer loop (counter-clockwise) with the holes
 /// (clockwise) directly inside it, triangulated. Points are numbered in loop order.
 struct Profile {
@@ -290,38 +340,7 @@ impl Profile {
                 l.reverse();
             }
         }
-        let starts: Vec<usize> = loops
-            .iter()
-            .scan(0, |s, l| {
-                let here = *s;
-                *s += l.len();
-                Some(here)
-            })
-            .collect();
-        let mut cap = Vec::new();
-        for (i, outer) in loops.iter().enumerate() {
-            let d = depth.get(i).copied().unwrap_or(0);
-            if d % 2 == 1 {
-                continue;
-            }
-            // Holes one level deeper inside this outer loop.
-            let holes: Vec<usize> = (0..loops.len())
-                .filter(|&j| depth.get(j) == Some(&(d + 1)) && loops.get(j).and_then(|h| h.first()).is_some_and(|p| point_in_polygon(outer, *p)))
-                .collect();
-            let hole_pts: Vec<&[Vec2]> = holes.iter().filter_map(|&j| loops.get(j).map(Vec::as_slice)).collect();
-            let tris = triangulate_with_holes(outer, &hole_pts)?;
-            // Map the triangulation's numbering (outer, then holes) to the profile's.
-            let mut map: Vec<usize> = (0..outer.len()).map(|k| starts.get(i).copied().unwrap_or(0) + k).collect();
-            for &j in &holes {
-                let len = loops.get(j).map_or(0, Vec::len);
-                map.extend((0..len).map(|k| starts.get(j).copied().unwrap_or(0) + k));
-            }
-            for t in tris {
-                if let (Some(a), Some(b), Some(c)) = (map.get(t[0]), map.get(t[1]), map.get(t[2])) {
-                    cap.push([*a, *b, *c]);
-                }
-            }
-        }
+        let cap = cap(&loops)?;
         Ok(Profile { loops, cap })
     }
 

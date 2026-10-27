@@ -21,6 +21,7 @@ mod bvh;
 mod merge;
 pub mod primitives;
 pub mod printability;
+pub mod skin;
 mod stitch;
 mod triangulate;
 
