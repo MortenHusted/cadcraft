@@ -203,8 +203,15 @@ fn collect(me: &Solid, other: &Solid, op: BoolOp, first: bool, tol: &Tol, out: &
         other.bvh.overlapping(&t.bounds.expand(tol.plane), &mut found);
         let cuts = cutters(t, other, &found, tol);
         if cuts.is_empty() {
+            // Nothing of the other surface crosses the triangle, so its centroid tells which side
+            // it is on, unless it lies on a flat face of the other with no outline near enough to
+            // cut along: the centroid is then on that face, and only stepping off it, as for a
+            // piece, tells how the two face. (Stepping off every triangle would step through a
+            // face hovering nearer than the step.)
+            let on_face = found.iter().filter_map(|i| other.tri(*i)).any(|s| s.p.iter().all(|q| (t.n.dot(*q) - t.d).abs() <= tol.plane));
             let c = (t.p[0] + t.p[1] + t.p[2]) * (1.0 / 3.0);
-            let side = if inside(other, c, tol) { Side::Inside } else { Side::Outside };
+            let centroid = || if inside(other, c, tol) { Side::Inside } else { Side::Outside };
+            let side = if on_face { classify(&t.p, t.n, other, tol).unwrap_or_else(centroid) } else { centroid() };
             if keep(side, op, first) {
                 emit(t.p.to_vec())?;
             }

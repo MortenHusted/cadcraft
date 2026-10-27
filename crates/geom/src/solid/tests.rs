@@ -363,6 +363,84 @@ fn a_finely_triangulated_face_lying_on_another_unites() {
     assert_near(i.volume(), 0.0, 1e-6);
 }
 
+/// A `size` square plate `h` thick whose top and bottom faces are an `n` by `n` grid of
+/// triangles, so most of its face triangles have no edge on the face's outline.
+fn grid_plate(n: u32, size: f64, h: f64) -> Mesh {
+    let (row, s) = (n + 1, size / f64::from(n));
+    let mut m = Mesh::default();
+    for z in [h, 0.0] {
+        for i in 0..row {
+            for j in 0..row {
+                m.vertices.push(v(f64::from(i) * s, f64::from(j) * s, z));
+            }
+        }
+    }
+    let (top, bottom) = (|i: u32, j: u32| i * row + j, |i: u32, j: u32| row * row + i * row + j);
+    for i in 0..n {
+        for j in 0..n {
+            let (a, b, c, d) = ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1));
+            m.triangles.push([top(a.0, a.1), top(b.0, b.1), top(c.0, c.1)]);
+            m.triangles.push([top(a.0, a.1), top(c.0, c.1), top(d.0, d.1)]);
+            m.triangles.push([bottom(a.0, a.1), bottom(c.0, c.1), bottom(b.0, b.1)]);
+            m.triangles.push([bottom(a.0, a.1), bottom(d.0, d.1), bottom(c.0, c.1)]);
+        }
+    }
+    // The outline, counter-clockwise seen from above.
+    let mut ring: Vec<(u32, u32)> = (0..n).map(|i| (i, 0)).collect();
+    ring.extend((0..n).map(|j| (n, j)));
+    ring.extend((0..n).map(|i| (n - i, n)));
+    ring.extend((0..n).map(|j| (0, n - j)));
+    for (k, p) in ring.iter().enumerate() {
+        let q = ring[(k + 1) % ring.len()];
+        m.triangles.push([bottom(p.0, p.1), bottom(q.0, q.1), top(q.0, q.1)]);
+        m.triangles.push([bottom(p.0, p.1), top(q.0, q.1), top(p.0, p.1)]);
+    }
+    m
+}
+
+#[test]
+fn a_box_on_a_finely_triangulated_face_is_told_apart_from_it() {
+    // The plate's face triangles under each box have no outline to cut along, so a box face
+    // lying on them is cut by nothing and must still be found to touch the plate.
+    let plate = grid_plate(20, 20.0, 2.0);
+    assert_closed(&plate);
+    let vp = plate.volume();
+    assert_near(vp, 800.0, 1e-9);
+    for k in 0..8 {
+        let (x, y) = (6.0 + 0.37 * f64::from(k), 7.0 + 0.53 * f64::from(k));
+        // A box standing on the top face, a flush pocket under it, and a box hovering a hair
+        // above the face, nearer than the step used to look off a face (with a post beside the
+        // plate, so the two solids' bounds overlap).
+        let on = cuboid(v(x, y, 2.0), v(x + 3.1, y + 2.7, 6.0)).unwrap();
+        let flush = cuboid(v(x, y, 1.0), v(x + 3.1, y + 2.7, 2.0)).unwrap();
+        let mut hover = cuboid(v(x, y, 2.0 + 1e-5), v(x + 3.1, y + 2.7, 6.0)).unwrap();
+        hover.append(&cuboid(v(25.0, 0.0, 0.0), v(26.0, 1.0, 6.0)).unwrap()).unwrap();
+        let (von, vflush, vhover) = (on.volume(), flush.volume(), hover.volume());
+        let cases = [
+            (&plate, &on, BoolOp::Union, vp + von),
+            (&on, &plate, BoolOp::Union, vp + von),
+            (&plate, &on, BoolOp::Difference, vp),
+            (&on, &plate, BoolOp::Difference, von),
+            (&plate, &on, BoolOp::Intersection, 0.0),
+            (&on, &plate, BoolOp::Intersection, 0.0),
+            (&plate, &flush, BoolOp::Union, vp),
+            (&flush, &plate, BoolOp::Union, vp),
+            (&plate, &flush, BoolOp::Difference, vp - vflush),
+            (&flush, &plate, BoolOp::Difference, 0.0),
+            (&plate, &flush, BoolOp::Intersection, vflush),
+            (&flush, &plate, BoolOp::Intersection, vflush),
+            (&plate, &hover, BoolOp::Union, vp + vhover),
+            (&plate, &hover, BoolOp::Difference, vp),
+            (&hover, &plate, BoolOp::Intersection, 0.0),
+        ];
+        for (i, (a, b, op, want)) in cases.into_iter().enumerate() {
+            let m = bool_op(a, b, op);
+            assert!(m.is_empty() || m.check().is_closed(), "box {k} case {i} {op:?}: {:?}", m.check());
+            assert!((m.volume() - want).abs() < 1e-6, "box {k} case {i} {op:?}: {} vs {want}", m.volume());
+        }
+    }
+}
+
 #[test]
 fn many_sequential_cuts_stay_closed() {
     // A plate with a grid of holes and bosses, the way a printed part is built up.
