@@ -131,7 +131,7 @@ walls; a wall too thick for the solid (its inside would fold over) is refused.
 - RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid)
   draws a shaded picture of the solids (default south-east isometric; `top`, `front`, `right`,
   `se`, `nw` … or any direction): the way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
-  Typed or chosen from a menu, RENDER opens the Render window: the solids shaded, preset view
+  Typed or chosen from a menu, RENDER (and 3DORBIT, the tool bar's Orbit) opens the Render window: the solids shaded, preset view
   buttons, drag the picture to orbit; it follows the drawing as you edit.
 
 ## Files

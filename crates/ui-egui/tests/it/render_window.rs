@@ -65,3 +65,13 @@ fn the_view_menu_opens_the_render_window() {
     h.run_steps(2);
     assert_eq!(h.state().ui.dialog.as_deref(), Some("render"));
 }
+
+#[test]
+fn orbit_opens_the_render_window() {
+    let mut h = harness();
+    h.state_mut().run("sphere", json!({"center": [0, 0, 0], "radius": 5})).unwrap();
+    h.state_mut().cmdline("3dorbit");
+    h.run_steps(3);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some("render"));
+    h.get_by_label("1 solid(s); drag the picture to orbit");
+}

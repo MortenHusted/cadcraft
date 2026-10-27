@@ -248,7 +248,8 @@ fn run_ui_command_inner(app: &mut CadApp, id: &str, params: &Value) -> Option<Re
             Ok(Value::Null)
         }
         // Typed or chosen from a menu: the Render window (with parameters RENDER makes a PNG).
-        "render" | "rr" if params.is_null() && app.session.state().is_ok() => {
+        // The drawing area shows plan view only, so 3DORBIT orbits the solids there too.
+        "render" | "rr" | "3dorbit" | "3do" | "orbit" if params.is_null() && app.session.state().is_ok() => {
             crate::render3d::open(app);
             Ok(Value::Null)
         }

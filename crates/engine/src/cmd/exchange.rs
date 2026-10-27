@@ -65,7 +65,11 @@ pub fn specs() -> Vec<CommandSpec> {
         })
         .params("not available yet")
         .noundo(),
-        CommandSpec::new("3dorbit", "Orbit", |_, _| Err(EngineError::Other("3DORBIT is not available yet: CADCraft draws in 2D (plan view) only".into())))
+        CommandSpec::new("3dorbit", "Orbit", |_, _| {
+            Err(EngineError::Other(
+                "3DORBIT is not available yet in the drawing area (it shows plan view only): typed or from the tool bar it opens the Render window, which orbits the 3D solids; RENDER with `view` makes a picture from any direction".into(),
+            ))
+        })
             .alias(&["3do", "orbit"])
             .params("not available yet")
             .noundo(),
