@@ -37,7 +37,8 @@ pub const FEATURE_ANGLE: f64 = 20.0;
 pub enum SolidError {
     /// A size, radius, profile or direction that encloses no volume.
     Degenerate(String),
-    /// More triangles, fragments or vertices than the caps allow.
+    /// More triangles (above [`MAX_TRIANGLES`]), pieces of a cut face or vertices than the caps
+    /// allow.
     TooComplex,
 }
 
@@ -45,7 +46,7 @@ impl fmt::Display for SolidError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SolidError::Degenerate(m) => write!(f, "{m}"),
-            SolidError::TooComplex => write!(f, "The solid is too complex (more than {MAX_TRIANGLES} triangles)."),
+            SolidError::TooComplex => write!(f, "The solids are too complex to combine (too many triangles, or a face cut into too many pieces)."),
         }
     }
 }

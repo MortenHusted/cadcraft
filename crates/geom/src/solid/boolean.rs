@@ -1,14 +1,15 @@
 //! Boolean operations on closed meshes: union, subtraction and intersection.
 //!
 //! Each triangle of one solid is cut by the planes of the other solid's triangles that cross it
-//! (and, where the two touch face to face, by the edges of the touching triangles), so that every
-//! piece lies wholly inside the other solid, outside it, or on its surface. A piece is classified
-//! by casting rays from points just in front of and just behind it: both outside, both inside,
-//! or one of each (the two surfaces touch, facing the same way or opposite ways). The pieces the
-//! operation keeps are welded into one closed mesh by [`super::stitch`]. A triangle whose pieces
-//! are all kept stays whole, and the kept pieces of the others are joined back into one outline
-//! per plane ([`super::merge`]), so cuts don't spread across faces far from where the solids
-//! meet.
+//! (and, where the two touch face to face, by the outline of the touching face), so that every
+//! piece lies wholly inside the other solid, outside it, or on its surface. A piece is cut only
+//! where the other surface actually meets the triangle, so cuts don't run across all of it. A
+//! piece is classified by casting rays from points just in front of and just behind it: both
+//! outside, both inside, or one of each (the two surfaces touch, facing the same way or opposite
+//! ways). The pieces the operation keeps are welded into one closed mesh by [`super::stitch`]. A
+//! triangle whose pieces are all kept stays whole, and the kept pieces of the others are joined
+//! back into one outline per plane ([`super::merge`]), so cuts don't spread across faces far from
+//! where the solids meet.
 
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ pub enum BoolOp {
 }
 
 /// Most pieces one triangle may be cut into.
-const MAX_PIECES: usize = 4096;
+const MAX_PIECES: usize = 200_000;
 
 /// Ray directions for inside tests, chosen to avoid lining up with axis-aligned edges.
 const DIRS: [[f64; 3]; 7] = [
@@ -51,6 +52,9 @@ struct Tri {
     n: Vec3,
     d: f64,
     bounds: Bounds3,
+    /// Per edge (`p[k]` to `p[k + 1]`): whether the triangle across it lies in the same plane
+    /// facing the same way, so the edge is inside a flat face, not on its outline.
+    inner: [bool; 3],
 }
 
 struct Solid {
@@ -61,17 +65,40 @@ struct Solid {
 
 impl Solid {
     fn new(m: &Mesh, tol: &Tol) -> Solid {
-        let tris: Vec<Tri> = m
-            .triangle_points()
-            .filter_map(|p| {
-                let c = (p[1] - p[0]).cross(p[2] - p[0]);
-                // Skip slivers with no area; they can't bound anything.
-                (c.len() > tol.plane * tol.plane).then(|| {
-                    let n = c.normalized();
-                    Tri { p, n, d: n.dot(p[0]), bounds: Bounds3::from_points(p) }
-                })
-            })
-            .collect();
+        let mut ids: Vec<[u32; 3]> = Vec::with_capacity(m.triangles.len());
+        let mut tris: Vec<Tri> = Vec::with_capacity(m.triangles.len());
+        for t in &m.triangles {
+            let Some(p) = m.corners(t) else { continue };
+            let c = (p[1] - p[0]).cross(p[2] - p[0]);
+            // Skip slivers with no area; they can't bound anything.
+            if c.len() > tol.plane * tol.plane {
+                let n = c.normalized();
+                tris.push(Tri { p, n, d: n.dot(p[0]), bounds: Bounds3::from_points(p), inner: [false; 3] });
+                ids.push(*t);
+            }
+        }
+        // An edge is inside a flat face when the two triangles sharing it are coplanar.
+        let mut by_edge: HashMap<(u32, u32), Vec<(usize, usize)>> = HashMap::new();
+        for (i, t) in ids.iter().enumerate() {
+            for k in 0..3 {
+                let (a, b) = (t[k], t[(k + 1) % 3]);
+                by_edge.entry((a.min(b), a.max(b))).or_default().push((i, k));
+            }
+        }
+        for uses in by_edge.values() {
+            if let [(i, k), (j, l)] = uses.as_slice() {
+                let flat = match (tris.get(*i), tris.get(*j)) {
+                    (Some(a), Some(b)) => a.n.dot(b.n) > 1.0 - 1e-12 && (a.d - b.d).abs() <= tol.plane,
+                    _ => false,
+                };
+                if let Some(e) = tris.get_mut(*i).and_then(|t| t.inner.get_mut(*k)) {
+                    *e = flat;
+                }
+                if let Some(e) = tris.get_mut(*j).and_then(|t| t.inner.get_mut(*l)) {
+                    *e = flat;
+                }
+            }
+        }
         let boxes: Vec<Bounds3> = tris.iter().map(|t| t.bounds).collect();
         let bounds = boxes.iter().fold(Bounds3::EMPTY, |b, t| b.union(t));
         Solid { bvh: Bvh::new(&boxes), tris, bounds }
@@ -174,8 +201,8 @@ fn collect(me: &Solid, other: &Solid, op: BoolOp, first: bool, tol: &Tol, out: &
             continue;
         }
         other.bvh.overlapping(&t.bounds.expand(tol.plane), &mut found);
-        let planes = cutting_planes(t, other, &found, tol);
-        if planes.is_empty() {
+        let cuts = cutters(t, other, &found, tol);
+        if cuts.is_empty() {
             let c = (t.p[0] + t.p[1] + t.p[2]) * (1.0 / 3.0);
             let side = if inside(other, c, tol) { Side::Inside } else { Side::Outside };
             if keep(side, op, first) {
@@ -183,7 +210,7 @@ fn collect(me: &Solid, other: &Solid, op: BoolOp, first: bool, tol: &Tol, out: &
             }
             continue;
         }
-        let parts = cut(t, &planes, tol)?;
+        let parts = cut(t, &cuts, tol)?;
         let kept: Vec<(Vec<Vec3>, bool)> = parts.into_iter().filter_map(|p| classify(&p, t.n, other, tol).map(|s| (p, keep(s, op, first)))).collect();
         if kept.iter().all(|(_, k)| *k) {
             emit(t.p.to_vec())?;
@@ -211,16 +238,26 @@ fn collect(me: &Solid, other: &Solid, op: BoolOp, first: bool, tol: &Tol, out: &
     Ok(())
 }
 
-/// The planes that separate `t` into pieces each wholly on one side of the other solid's surface.
-fn cutting_planes(t: &Tri, other: &Solid, found: &[u32], tol: &Tol) -> Vec<(Vec3, f64)> {
-    let mut planes: Vec<(Vec3, f64)> = Vec::new();
-    let mut add = |n: Vec3, d: f64| {
-        let dup = planes.iter().any(|(m, e)| {
-            let c = m.dot(n);
-            (c > 1.0 - 1e-12 && (d - e).abs() <= tol.plane) || (c < -1.0 + 1e-12 && (d + e).abs() <= tol.plane)
+/// A plane that cuts a triangle, and the box around where the other solid's surface actually
+/// meets the triangle's plane along it: only pieces near that box need cutting.
+struct Cutter {
+    n: Vec3,
+    d: f64,
+    reach: Bounds3,
+}
+
+/// The cuts that separate `t` into pieces each wholly on one side of the other solid's surface.
+fn cutters(t: &Tri, other: &Solid, found: &[u32], tol: &Tol) -> Vec<Cutter> {
+    let mut cuts: Vec<Cutter> = Vec::new();
+    let mut add = |n: Vec3, d: f64, a: Vec3, b: Vec3| {
+        let reach = Bounds3::from_points([a, b]).expand(tol.plane);
+        let same = cuts.iter_mut().find(|c| {
+            let k = c.n.dot(n);
+            (k > 1.0 - 1e-12 && (d - c.d).abs() <= tol.plane) || (k < -1.0 + 1e-12 && (d + c.d).abs() <= tol.plane)
         });
-        if !dup {
-            planes.push((n, d));
+        match same {
+            Some(c) => c.reach = c.reach.union(&reach),
+            None => cuts.push(Cutter { n, d, reach }),
         }
     };
     let apart = |ds: [f64; 3]| ds.iter().all(|x| *x > tol.plane) || ds.iter().all(|x| *x < -tol.plane);
@@ -229,38 +266,73 @@ fn cutting_planes(t: &Tri, other: &Solid, found: &[u32], tol: &Tol) -> Vec<(Vec3
         if apart(ds) {
             continue;
         }
+        let edges = [(s.p[0], s.p[1]), (s.p[1], s.p[2]), (s.p[2], s.p[0])];
         if ds.iter().all(|x| x.abs() <= tol.plane) {
-            // Face to face: cut along the other triangle's edges, across `t`'s plane.
-            for (u, w) in [(s.p[0], s.p[1]), (s.p[1], s.p[2]), (s.p[2], s.p[0])] {
+            // Face to face: cut along the outline of the other face (its triangles' edges that
+            // aren't inside it), across `t`'s plane.
+            for (k, (u, w)) in edges.into_iter().enumerate() {
                 let n = t.n.cross(w - u).normalized();
-                if n != Vec3::ZERO {
-                    add(n, n.dot(u));
+                if n != Vec3::ZERO && !s.inner.get(k).copied().unwrap_or(false) {
+                    add(n, n.dot(u), u, w);
                 }
             }
             continue;
         }
-        if !apart(t.p.map(|q| s.n.dot(q) - s.d)) {
-            add(s.n, s.d);
+        if apart(t.p.map(|q| s.n.dot(q) - s.d)) {
+            continue;
+        }
+        // Where `s` crosses `t`'s plane: the points of its edges on that plane.
+        let dist = |q: Vec3| t.n.dot(q) - t.d;
+        let mut on: Vec<Vec3> = Vec::with_capacity(3);
+        for (u, w) in edges {
+            let (du, dw) = (dist(u), dist(w));
+            if du.abs() <= tol.plane {
+                on.push(u);
+            }
+            if (du > tol.plane && dw < -tol.plane) || (du < -tol.plane && dw > tol.plane) {
+                on.push(u.lerp(w, du / (du - dw)));
+            }
+        }
+        if let (Some(a), Some(b)) = (on.iter().copied().reduce(|x, y| x.min(y)), on.iter().copied().reduce(|x, y| x.max(y))) {
+            add(s.n, s.d, a, b);
         }
     }
-    planes
+    cuts
 }
 
-/// Cut triangle `t` by each plane in turn.
-fn cut(t: &Tri, planes: &[(Vec3, f64)], tol: &Tol) -> Result<Vec<Vec<Vec3>>, SolidError> {
-    let mut parts = vec![t.p.to_vec()];
-    for (n, d) in planes {
-        let mut next = Vec::with_capacity(parts.len() + 2);
-        for p in parts {
-            let (front, back) = split(p, *n, *d, tol.plane);
-            next.extend([front, back].into_iter().filter(|q| q.len() >= 3));
+/// Cut triangle `t` into pieces no cut crosses: each piece is cut only by the cuts whose reach
+/// it overlaps and that cross it, so a cut doesn't spread across the whole triangle.
+fn cut(t: &Tri, cuts: &[Cutter], tol: &Tol) -> Result<Vec<Vec<Vec3>>, SolidError> {
+    let mut done: Vec<Vec<Vec3>> = Vec::new();
+    let mut stack: Vec<(Vec<Vec3>, Vec<usize>)> = vec![(t.p.to_vec(), (0..cuts.len()).collect())];
+    while let Some((poly, list)) = stack.pop() {
+        let near = Bounds3::from_points(poly.iter().copied()).expand(tol.plane);
+        let mut halves: Option<(Vec<Vec3>, Vec<Vec3>)> = None;
+        let mut rest: Vec<usize> = Vec::with_capacity(list.len());
+        for i in list {
+            let Some(c) = cuts.get(i).filter(|c| c.reach.intersects(&near)) else { continue };
+            if halves.is_some() {
+                rest.push(i);
+                continue;
+            }
+            // A cut that doesn't cross this piece can't cross its parts either: drop it.
+            let (front, back) = split(poly.clone(), c.n, c.d, tol.plane);
+            if front.len() >= 3 && back.len() >= 3 {
+                halves = Some((front, back));
+            }
         }
-        if next.len() > MAX_PIECES {
+        match halves {
+            Some((front, back)) => {
+                stack.push((front, rest.clone()));
+                stack.push((back, rest));
+            }
+            None => done.push(poly),
+        }
+        if done.len() + stack.len() > MAX_PIECES {
             return Err(SolidError::TooComplex);
         }
-        parts = next;
     }
-    Ok(parts)
+    Ok(done)
 }
 
 /// Split a convex polygon by the plane `n·x = d` into its front and back parts (either may be

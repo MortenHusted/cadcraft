@@ -343,6 +343,27 @@ fn rotated_solids_satisfy_inclusion_exclusion() {
 }
 
 #[test]
+fn a_finely_triangulated_face_lying_on_another_unites() {
+    // The holed plate's bottom face is many long triangles; only its outline (and the holes')
+    // may cut the base's top face, or the cuts multiply past the piece cap.
+    let mut holed = cuboid(v(0.0, 0.0, 10.0), v(60.0, 86.0, 12.0)).unwrap();
+    let mut expected = holed.volume();
+    for i in 0..6 {
+        for j in 0..8 {
+            let hole = frustum(v(5.0 + 10.0 * f64::from(i), 5.0 + 10.5 * f64::from(j), 9.0), 2.0, 2.0, 4.0, 24).unwrap();
+            expected -= hole.volume() / 2.0;
+            holed = bool_op(&holed, &hole, BoolOp::Difference);
+        }
+    }
+    let base = cuboid(v(-5.0, -5.0, 0.0), v(65.0, 91.0, 10.0)).unwrap();
+    let u = bool_op(&base, &holed, BoolOp::Union);
+    assert_closed(&u);
+    assert_near(u.volume(), base.volume() + expected, 1e-6);
+    let i = bool_op(&base, &holed, BoolOp::Intersection);
+    assert_near(i.volume(), 0.0, 1e-6);
+}
+
+#[test]
 fn many_sequential_cuts_stay_closed() {
     // A plate with a grid of holes and bosses, the way a printed part is built up.
     let mut part = cuboid(Vec3::ZERO, v(60.0, 86.0, 10.0)).unwrap();
