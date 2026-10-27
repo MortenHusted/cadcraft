@@ -362,3 +362,69 @@ fn text_extrudes_into_lettering_in_an_outline_font() {
         Err(e) => assert!(e.to_string().contains("single-stroke"), "{e}"),
     }
 }
+
+#[test]
+fn filletedge_and_chamferedge_round_and_bevel_the_picked_edges() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 6, 4]})));
+    // The four bottom edges bevelled 0.5: four prisms of 0.125 per unit length, less the four
+    // corners where neighbours overlap (0.5³/3 each).
+    let r = run(&mut s, "chamferedge", json!({"handles": [b], "edges": "bottom", "distance": 0.5}));
+    assert_eq!(r["edges"], 4);
+    assert_eq!(r["closed"], true);
+    let so = solid(&s, &b);
+    assert!(so.mesh().check().is_closed());
+    near(so.mass_props().volume, 240.0 - (32.0 * 0.125 - 4.0 * 0.125 / 3.0), 1e-9);
+    // One top edge picked by a point on it, rounded with radius 1: (1 − π/4) per unit length,
+    // a little more where the arc is faceted.
+    let before = so.mass_props().volume;
+    let r = run(&mut s, "filletedge", json!({"handles": [b], "edges": [[5, 0, 4]], "radius": 1}));
+    assert_eq!(r["edges"], 1);
+    let loss = before - solid(&s, &b).mass_props().volume;
+    near(loss, (1.0 - PI / 4.0) * 10.0, 0.05 * (1.0 - PI / 4.0) * 10.0);
+    // The undo restores the sharp edge.
+    s.undo().unwrap();
+    near(solid(&s, &b).mass_props().volume, before, 1e-9);
+}
+
+#[test]
+fn filletedge_fills_an_inside_corner_and_refuses_bad_input() {
+    let mut s = Session::new();
+    let floor = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 10, 2]})));
+    let wall = handle(&run(&mut s, "box", json!({"corner": [0, 8, 0], "opposite": [10, 10, 8]})));
+    run(&mut s, "union", json!({"handles": [floor, wall]}));
+    let before = solid(&s, &floor).mass_props().volume;
+    let r = run(&mut s, "filletedge", json!({"handles": [floor], "edges": "concave", "radius": 2}));
+    assert_eq!(r["edges"], 1);
+    let gain = solid(&s, &floor).mass_props().volume - before;
+    near(gain, (4.0 - PI) * 10.0, 0.05 * (4.0 - PI) * 10.0);
+    assert!(solid(&s, &floor).mesh().check().is_closed());
+    let line = handle(&run(&mut s, "line", json!({"points": [[0, 0], [1, 1]]})));
+    for (p, why) in [
+        (json!({"handles": [line]}), "select 3D solids"),
+        (json!({"handles": [floor], "edges": "sideways"}), "must be one of"),
+        (json!({"handles": [floor], "edges": [[100, 100, 100]]}), "no edge"),
+        (json!({"handles": [floor], "radius": -1}), "positive"),
+        (json!({"handles": [floor], "edges": 7}), "keyword or a list"),
+    ] {
+        let e = s.execute("filletedge", &p).unwrap_err().to_string();
+        assert!(e.contains(why), "{p}: {e}");
+    }
+}
+
+#[test]
+fn filletedge_from_the_command_line_picks_the_highest_edge_in_plan() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [10, 6, 4]})));
+    s.set_selection(Vec::new());
+    s.cmdline("filletedge").unwrap();
+    s.cmdline("r").unwrap();
+    s.cmdline("0.5").unwrap();
+    // In plan the top and bottom front edges lie over each other: the top one is picked.
+    s.cmdline("5,0").unwrap();
+    s.cmdline("").unwrap();
+    let so = solid(&s, &b);
+    assert!(so.mesh().check().is_closed());
+    near(240.0 - so.mass_props().volume, (1.0 - PI / 4.0) * 0.25 * 10.0, 0.05 * (1.0 - PI / 4.0) * 0.25 * 10.0);
+    assert!(so.bounds().max.z == 4.0 && so.mesh().vertices.iter().any(|v| v.z < 4.0 && v.z > 3.5 && v.y < 0.5 && v.y > 0.0));
+}

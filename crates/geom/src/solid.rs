@@ -18,6 +18,7 @@ use crate::{Bounds3, Mat4, Vec3};
 
 pub mod boolean;
 mod bvh;
+pub mod edges;
 mod merge;
 pub mod primitives;
 pub mod printability;

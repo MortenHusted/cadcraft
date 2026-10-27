@@ -43,6 +43,39 @@ where solids touch along an edge or at a point, which no closed mesh can represe
 ROTATE, SCALE and MIRROR also work on solids in plan; 3DMOVE, 3DROTATE and MIRROR3D move other
 objects only when the transform keeps them in plan.
 
+## Rounding and bevelling edges
+
+FILLETEDGE rounds edges and CHAMFEREDGE bevels them: a convex edge is cut away, a concave one
+(an inside corner, such as the foot of a boss) filled. An edge is where two faces meet at more
+than 20°, followed for as long as it turns smoothly, so the rim of a cylinder or of a rounded
+rectangle is one edge.
+
+| Command | JSON parameters |
+|---|---|
+| FILLETEDGE | `{handles?, edges?, radius? (1)}` |
+| CHAMFEREDGE | `{handles?, edges?, distance? (1), distance2? (= distance), base? ([0,0,1])}`: `distance` runs along the face whose normal is nearest `base` (either way), `distance2` along the other |
+
+`edges` is `"all"` (the default), `"top"` or `"bottom"` (the edges in the solid's highest or
+lowest plane), `"vertical"`, `"convex"`, `"concave"`, or a list of points `[x, y, z]` on or near
+edges, each picking the nearest. Typed or chosen from the menu, the commands pick edges in plan
+(the highest where edges lie over each other) until Enter; `R` (FILLETEDGE) and `D`
+(CHAMFEREDGE) change the radius and distances.
+
+The cut follows a ball of the radius rolling along both faces (a bevel, a flat between the two
+distances), mitred where the edge turns. Where an edge ends against a face leaning away from it
+(a box corner) the cut runs past that face; against a face leaning over it (a wall) it stops
+there. Where three edges rounded to one radius meet at a convex corner, a ball rounds the
+corner. Round the vertical edges first and then the top rim, and the rim is one smooth edge:
+
+```json
+{"command": "filletedge", "params": {"handles": ["1F"], "edges": "vertical", "radius": 5}}
+{"command": "filletedge", "params": {"handles": ["1F"], "edges": "top", "radius": 2}}
+{"command": "chamferedge", "params": {"handles": ["1F"], "edges": "bottom", "distance": 0.6}}
+```
+
+The last line bevels the bottom rim, which keeps the first layers' squash (elephant's foot)
+from sticking out.
+
 ## Checking
 
 - MASSPROP reports volume (mass at unit density), area, bounding box, centroid, moments and
@@ -94,5 +127,6 @@ boxes, cylinders and spheres.
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
-meshes, PYRAMID, POLYSOLID, SWEEP, LOFT, solid fillets and chamfers, SOLIDEDIT, 3DALIGN or
-3DARRAY, and no STEP import. See F24 in [gaps.md](gaps.md).
+meshes, PYRAMID, POLYSOLID, SWEEP, LOFT, SOLIDEDIT, 3DALIGN or 3DARRAY, and no STEP import.
+FILLETEDGE has no variable radius and rounds only corners where three edges of one radius
+meet with a ball; other corners keep where the cuts cross. See F24 in [gaps.md](gaps.md).
