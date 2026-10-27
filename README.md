@@ -129,6 +129,7 @@ CADCraft requires Rust 1.95 or later.
 git clone https://github.com/storytold/cadcraft
 cd cadcraft
 cargo run --release -p cadcraft -- --sample       # opens the sample drawing
+cargo run --release -p cadcraft -- --metric       # starts with a new metric drawing
 ```
 
 Then try typing at the command line:
