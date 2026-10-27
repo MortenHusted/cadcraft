@@ -47,9 +47,9 @@ Example client configuration (Claude Code / Claude Desktop):
 | `execute {"command": "usage", "params": {type?, limit?, offset?}}` | Read-only cross-reference of the layers, blocks, text styles and linetypes: for each, the objects in model space and layouts that use it, the objects in block definitions that use it, whether it is used only inside block definitions, and whether it is empty or unused. `summary` counts each kind and `unused` lists what PURGE would offer, in table order. One scan reads at most 5,000,000 objects; a larger drawing sets `incomplete: true` with an `incompleteReason`, because counts, statuses and summaries then omit the objects past the limit. |
 | `execute {"command": "loops", "params": {tolerance?, maxPairs?, limit?, offset?}}` | Implied closed loops from loose LINE and ARC chains: each closed loop with its member handles, perimeter, area and winding, exact with arcs; each open chain with the endpoint gap, its location (`at`, `ends`) and length; and branch junctions (three or more ends meeting), reported but not resolved. `tolerance` defaults to 1e-9 × the extents diagonal; the quadratic endpoint pairing stops at `maxPairs` (default 1,000,000) and reports `capped` with `pairTestsNeeded` instead of guessing from a partial pairing. |
 | `query_entities {type?, layer?, selected?, window?, crossing?, limit?, offset?}` | Filtered entities with handles and geometry. `selected: true` restricts results to the current selection in the active space; an empty selection returns no entities. Omitted/false queries all entities in that space. Filters combine before paging. `window` `[[x0,y0],[x1,y1]]` finds objects whose geometry is inside it or crosses it (`crossing: false`: entirely inside). `count` is every match, `returned` the page (`offset`, `limit`, default 500). |
-| `render {width?, height?, fit?, window?}` | A PNG image of the drawing, or of just the area `window` `[[x0,y0],[x1,y1]]` (one sheet or room of a large drawing; 1600 px wide with the window's shape unless sized). |
+| `render {width?, height?, fit?, window?, view?}` | A PNG image of the drawing, or of just the area `window` `[[x0,y0],[x1,y1]]` (one sheet or room of a large drawing; 1600 px wide with the window's shape unless sized). With `view` (`top`, `bottom`, `front`, `back`, `left`, `right`, `se`, `sw`, `ne`, `nw`, or a direction `[x,y,z]` towards the viewer) it is a shaded 3D picture of the 3D solids with their edges (the RENDER command). |
 | `find_text {contains?, layer?, window?, limit?, offset?}` | The readable texts — TEXT, MTEXT without formatting codes, block attributes, multileaders — with text, insertion point, height, rotation, style, layer and handle; filtered by content (any case), layer and a window around the insertion points. Read-only (the `texts` command). |
-| `new_drawing {metric?}`, `open {path}`, `save {path?}`, `cancel` | Files and Escape. `save` to a `.svg`, `.png` or `.pdf` path exports: the drawing keeps its name and unsaved changes. |
+| `new_drawing {metric?}`, `open {path}`, `save {path?}`, `cancel` | Files and Escape. `save` to a `.svg`, `.png` or `.pdf` path exports, and to a `.stl` or `.3mf` path writes the 3D solids for a slicer: the drawing keeps its name and unsaved changes. |
 | `screenshot`, `ui_inspect`, `ui_click {x, y}` | Only when connected to the app. |
 
 Resources: `cadcraft://drawing` (inspect JSON) and `cadcraft://commands` (catalog).
@@ -69,3 +69,16 @@ point, an unknown command) returns a result with `isError: true` and the message
 
 The end-to-end test in `crates/mcp/src/tests.rs` runs a session like this and checks the result
 only through MCP.
+
+## Modeling a part for 3D printing
+
+1. `new_drawing {"metric": true}`
+2. `execute {"command": "rectang", "params": {"p1": [0, 0], "p2": [60, 40], "fillet": 4}}` → `handle`
+3. `execute {"command": "extrude", "params": {"handles": ["<handle>"], "height": 5}}` → the plate
+4. `execute {"command": "cylinder", "params": {"center": [15, 20, -1], "radius": 5, "height": 7}}`
+5. `execute {"command": "subtract", "params": {"from": ["<plate>"], "remove": ["<cylinder>"]}}`:
+   `closed: true` says the result is one watertight solid
+6. `render {"view": "se"}` — look at it; `execute {"command": "massprop", ...}` for volume and size
+7. `save {"path": "part.3mf"}` — open it in the slicer
+
+[solids.md](solids.md) lists the 3D commands and their parameters.

@@ -1,6 +1,6 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-25 · **Change:** minor (DIMTFILL limits in the `*D` block, EXPLODE and DXF: F7 updated) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (3D solids as closed meshes, their modeling commands, RENDER pictures and STL/3MF output: F24 and FF11 narrowed) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
 list: agents pick from here (top of a section first), and remove or update a row in the same PR
@@ -45,7 +45,7 @@ do them first.
 | F21 | MLINE, REGION and HELIX are objects since #510, with gaps: MLEDIT tees trim square; UNION/SUBTRACT/INTERSECT only combine regions whose boundaries don't meet; regions are saved as closed polylines (no ACIS data); PURGE skips multiline styles | `draw2/mline.rs`, `inquiry/regions.rs`, `dxf_region.rs` | Low | 6–10 |
 | F22 | Inquiry leftovers (COUNT across spaces and nested blocks, the QuickCalc palette and COMPARE landed, #563; MASSPROP on regions, #510): COMPARE compares the tab shown, not every layout at once (COMPAREEXPORT, the comparison as a new drawing, landed); COMPAREEXPORT puts the two sets of objects in model-space groups, where AutoCAD puts them in blocks; QuickCalc keeps its history and variables for the session only | `file/compare.rs`, `palettes/quickcalc.rs` | Low | 3–5 |
 | F23 | No Sheet Set Manager, eTransmit, Share, Traces, Markup Import, Activity Insights | menu items uncovered | Low-medium (team workflows) | 40–70 |
-| F24 | No 3D: UCS, 3D views, orbit, solids, surfaces, meshes, sections, visual styles, materials, lights, rendering (150 menu items) | [parity-checklist](parity-checklist.md) | Medium (3D users) | 300–450 |
+| F24 | 3D is partial. 3D solids are closed triangle meshes (`geom/src/solid`): BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, EXTRUDE, REVOLVE, UNION/SUBTRACT/INTERSECT and MASSPROP on solids, 3DMOVE, 3DROTATE, MIRROR3D, SLICE and INTERFERE; RENDER makes a shaded picture from a preset or any view direction (also the MCP `render` tool's `view`); STLOUT, 3DPRINT and EXPORT write STL and 3MF. Left: no 3D view in the drawing area (UCS, orbit, 3D views, visual styles: solids show as plan wireframes), no surfaces, meshes, sections, materials or lights, no PYRAMID, POLYSOLID, SWEEP, LOFT, solid FILLETEDGE/CHAMFEREDGE, SOLIDEDIT, 3DALIGN or 3DARRAY; curved faces are faceted when a solid is made; solids are saved as polyface meshes (no ACIS), and 3DSOLIDs from other programs stay unknown objects | `geom/src/solid`, `cmd/solids` | Medium (3D users) | 260–410 |
 
 ## UI/UX
 
@@ -83,7 +83,7 @@ Detail: [file-format-parity.md](file-format-parity.md).
 | FF8 | SHX fonts (shape and big fonts) not read | Medium-high (text metrics differ) | 8–12 |
 | FF9 | `.pc3` plotter configuration files; linetype shape (SHX) elements are skipped (templates and `.dwt`, user `.lin`/`.pat` and `.pgp` alias files landed, #552; `.ctb`/`.stb`, #410) | Low-medium | 5–10 |
 | FF10 | PDF import and underlays (PDFATTACH); raster image attach (IMAGEATTACH). PDF export has real text in embedded TrueType subsets, PDF layers, several sheets per file and hyperlinks (#567, #571) | Medium | 20–35 |
-| FF11 | DWF/DWFx, DGN, WMF, EPS, ACIS/STL and other exchange formats | Low-medium | 50–100 |
+| FF11 | DWF/DWFx, DGN, WMF, EPS, ACIS, STEP and other exchange formats; STL and 3MF are written (3D solids) but not read | Low-medium | 50–100 |
 | FF12 | DWG in the web build | Medium | 6–10 |
 | FF13 | R12 binary DXF, pre-R13 DWG | Low | 10–20 |
 | FF14 | SVG import leftovers (shapes, paths, groups and Inkscape layers landed, #636): no CSS classes (`<style>`), `use` references, fills and gradients, text or embedded images; rounded rectangle corners (`rx`/`ry`) are ignored. Opening such a file names what was left out (#627) | Low-medium | 2–4 |
@@ -150,6 +150,7 @@ Detail: [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | 3D solids: closed-mesh kernel with booleans (`geom/src/solid`), the 3DSOLID object saved as a polyface mesh with CADCraft xdata, BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, EXTRUDE, REVOLVE, the booleans and MASSPROP on solids, 3DMOVE, 3DROTATE, MIRROR3D, SLICE, INTERFERE, RENDER (shaded picture, MCP `render` with `view`), STLOUT, 3DPRINT and STL/3MF EXPORT: F24 and FF11 narrowed |
 | 2026-10-25 | minor | DIMTFILL limits: with DIMTFILL 1 (the drawing's background color) the written `*D` block and EXPLODE keep no background mask (a WIPEOUT over the text box would), and a true-color DIMTFILLCLR is written to DXF as the nearest ACI: F7 updated |
 | 2026-10-24 | minor | COMPAREEXPORT (typed, or Export on the comparison bar) opens the comparison as a new untitled drawing, `compare_<this> vs <other>.dwg`: this drawing's objects in one group and the other drawing's differing objects in a second group, in the comparison colors (green, red, gray for objects in both), block contents and style colors included: F22 narrowed |
 | 2026-10-24 | minor | DIMTFILL and DIMTFILLCLR: a dimension's text background (none, the drawing's background color, or a color) hides what is drawn under the text; SETVAR, DIMOVERRIDE and style fields, DIMSTYLE groups 69 and 70 in DXF from R2007 (CADCraft xdata before), and a SOLID in the `*D` block and from EXPLODE for DIMTFILL 2: F7 narrowed |

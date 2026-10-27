@@ -12,7 +12,7 @@ About 57,000 lines of Rust in 12 library crates, 3 apps and `xtask` (counted 202
 
 | Layer | Crate | Lines | What it does |
 |---|---|---:|---|
-| L0 | `geom` | 2,067 | f64 2D/3D vectors, `Mat3`/`Mat4`, bounds, lines, arcs and bulges, circles, ellipses, (rational) B-splines with fit-point interpolation, line/arc intersections, tessellation, planar region tracing for HATCH/BOUNDARY (`region.rs`) |
+| L0 | `geom` | 2,067 | f64 2D/3D vectors, `Mat3`/`Mat4`, bounds, lines, arcs and bulges, circles, ellipses, (rational) B-splines with fit-point interpolation, line/arc intersections, tessellation, planar region tracing for HATCH/BOUNDARY (`region.rs`), 3D solids as closed meshes with primitives, extrusion, revolution and booleans (`solid/`) |
 | L0 | `dxf` | 571 | Standalone DXF tag reader/writer: ASCII and binary, tag-count limits for hostile input |
 | L1 | `color` | 265 | AutoCAD Color Index table, true colour, ByLayer/ByBlock |
 | L1 | `doc` | 3,054 | The drawing database: header, symbol tables (layers, linetypes, text/dimension/table/multileader styles), blocks, model space, layouts, constraints; copy-on-write `EntityStore`; our own hatch pattern and linetype library (`library.rs`) |
@@ -39,9 +39,10 @@ wgpu or rfd.
   `EntityKind`: Line, Point, Circle, Arc, Ellipse, LwPolyline, Polyline3d, Spline, Ray, XLine,
   Text, MText, AttDef, Insert (with attributes), Dimension (linear, aligned, angular, diameter,
   radius, ordinate, arc length), Leader, MLeader, Hatch (pattern, solid, gradient), Solid,
-  Trace, Face3d, Viewport, Image, Wipeout, Table and Unknown (raw DXF tags).
-- There are no 3D solids, surfaces, meshes, regions (ACIS), multilines, tolerance frames or
-  underlays in the model yet ([gaps.md](gaps.md)).
+  Trace, Face3d, Solid3d (a closed triangle mesh, `geom::solid`), Viewport, Image, Wipeout,
+  Table and Unknown (raw DXF tags).
+- There are no surfaces, meshes, ACIS data, multilines, tolerance frames or underlays in the
+  model yet ([gaps.md](gaps.md)); 3D solids are meshes, saved as polyface meshes.
 - Entity collections are copy-on-write, so undo is a whole-drawing snapshot that costs little.
 - Coordinates are f64 world units. 2D work happens in the WCS; there is no UCS yet.
 
