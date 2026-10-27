@@ -54,7 +54,7 @@ objects only when the transform keeps them in plan.
   an FDM printer standing as it is (Z up, its lowest point on the bed): whether it is closed,
   fits the build volume `bed` and lies flat on the bed; the area of overhangs leaning more than
   `limit` (46°) from vertical, summed by 5-unit bands of height so the culprit stands out
-  (faces past `ceiling`, 85°, are ceilings, not overhangs); and the faces that start in mid air
+  (faces past `ceiling`, 85°, are ceilings, not overhangs); and the faces (of at least 0.01 mm²) that start in mid air
   with nothing of the solid under them (including roofs that can only bridge). `ok` is true
   when it finds nothing; `problems` says what it found, in words.
 - RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid)

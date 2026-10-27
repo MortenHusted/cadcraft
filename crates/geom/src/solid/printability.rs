@@ -6,7 +6,8 @@
 //!   by height band, because where the steep area is tells which feature it is.
 //! - **Floating faces**: downward faces above the bed with none of the solid anywhere under them:
 //!   they start in mid air. A roof over a through slot counts too: whether it prints depends on
-//!   how far it has to bridge.
+//!   how far it has to bridge. Faces smaller than [`MIN_FLOATING_AREA`] are left out: slivers
+//!   where curved faces of different facet counts meet, far below a nozzle's line width.
 //! - **Bed contact**: the area of the faces lying on the bed.
 
 use std::collections::HashMap;
@@ -48,6 +49,9 @@ pub struct Printability {
 
 /// Height of the bands overhangs are summed in (drawing units).
 pub const BAND: f64 = 5.0;
+/// Smallest floating face reported (square drawing units, millimetres in practice): a tenth of a
+/// millimetre square, under a quarter of a 0.4 mm line.
+pub const MIN_FLOATING_AREA: f64 = 0.01;
 /// Most ceiling faces examined for support (each casts a few rays).
 const MAX_CEILING_TRIANGLES: usize = 200_000;
 
@@ -106,8 +110,8 @@ pub fn check(m: &Mesh, limit: f64, ceiling: f64) -> Printability {
     };
     for face in faces(&ceilings, tol) {
         let held = face.iter().any(|t| probes(t).iter().any(|p| below(*p)));
-        if !held {
-            let area = face.iter().map(|[a, b, c]| (*b - *a).cross(*c - *a).len() / 2.0).sum();
+        let area: f64 = face.iter().map(|[a, b, c]| (*b - *a).cross(*c - *a).len() / 2.0).sum();
+        if !held && area >= MIN_FLOATING_AREA {
             let fb = Bounds3::from_points(face.iter().flatten().copied());
             out.floating.push(Floating { z: fb.center().z, area, at: fb.center() });
         }
@@ -225,5 +229,17 @@ mod tests {
         let cavity = cuboid(v(2.0, 2.0, 3.0), v(18.0, 8.0, 6.0)).unwrap();
         let hollow = boolean(&block, &cavity, BoolOp::Difference).unwrap();
         assert!(check(&hollow, 46.0, 85.0).floating.is_empty());
+    }
+
+    #[test]
+    fn a_sliver_too_small_to_print_does_not_float() {
+        // A block with a tiny tab sticking out halfway up: its underside (0.05 × 0.05) floats but
+        // is far below a printed line; a 1 × 1 tab is reported.
+        let block = cuboid(Vec3::ZERO, v(10.0, 10.0, 10.0)).unwrap();
+        for (w, floats) in [(0.05, false), (1.0, true)] {
+            let tab = cuboid(v(10.0 - 1e-3, 5.0, 5.0), v(10.0 + w, 5.0 + w, 6.0)).unwrap();
+            let m = boolean(&block, &tab, BoolOp::Union).unwrap();
+            assert_eq!(!check(&m, 46.0, 85.0).floating.is_empty(), floats, "{w}");
+        }
     }
 }
