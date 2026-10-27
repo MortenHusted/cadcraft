@@ -268,7 +268,11 @@ pub fn loft(sections: &[Vec<Vec3>], ruled: bool) -> Result<Mesh, SolidError> {
     let all: Vec<Vec<f64>> = loops.iter().map(|l| if l.len() == 1 { Vec::new() } else { stations(l) }).collect();
     let mut merged: Vec<f64> = all.iter().flatten().copied().collect();
     merged.sort_by(f64::total_cmp);
-    merged.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    // Stations of different sections that nearly coincide would leave slivers of walls between
+    // them: keep one where they are closer than a quarter of the finest section's spacing.
+    let finest = all.iter().map(Vec::len).max().unwrap_or(1).max(1);
+    let gap = 0.25 / finest as f64;
+    merged.dedup_by(|a, b| (*a - *b).abs() < gap);
     if merged.len() > MAX_PROFILE_POINTS {
         return Err(SolidError::TooComplex);
     }
