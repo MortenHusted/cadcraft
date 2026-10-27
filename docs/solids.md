@@ -159,18 +159,24 @@ walls; a wall too thick for the solid (its inside would fold over) is refused.
 ## How the booleans work
 
 Each triangle of one solid is cut by the planes of the other solid's triangles that cross it,
-so each piece lies wholly inside, outside or on the other solid. A piece is classified by casting
-rays from points just in front of and just behind it; the kept pieces of each face are joined
+so each piece lies wholly inside, outside or on the other solid. A piece is cut only where the
+segment along which the other surface meets the triangle passes through it, and where that
+surface turns inside the triangle a cut across the turn comes first, so no cut runs on past its
+segment alongside the next one. Each corner where the two surfaces meet is computed once, from
+an edge of one solid and a plane of the other, so both solids put it at exactly the same point.
+A piece is classified by casting rays from its centre (from points just in front of and just
+behind it where it lies on the other solid's surface); the kept pieces of each face are joined
 back into one outline and triangulated again, and everything is welded into one mesh with
 T-junctions split. Property tests check exact volumes and watertightness for thousands of
 box pairs on a coarse grid (coincident and touching faces) and inclusion-exclusion for rotated
-boxes, cylinders and spheres.
+boxes, cylinders and spheres, a curved face tessellated into strips 0.01 wide and sides bent by
+a hundred-thousandth of a radian.
 
-Known weakness: meshes made elsewhere whose curved faces are tessellated into very long, thin
-triangles (strips a few hundredths of a millimetre wide, as some CAD exports on MakerWorld have)
-can make a boolean come out not closed (`closed: false`): cut points where such strips cross the
-other solid at shallow angles don't meet exactly. Solids made in CADCraft don't have such
-strips. Check the result (`solidedit.check`, PRINTCHECK) before printing a remixed download.
+Meshes made elsewhere whose curved faces are tessellated into long thin strips, as some CAD
+exports on MakerWorld are, combine like any other. An input mesh that touches itself along lines,
+or that contains inverted triangles (a sliver facing the wrong way, folding a flat face over
+itself), can still give a result that isn't closed (`closed: false`); `solidedit.check` and
+PRINTCHECK show this, so check a remixed download before printing it.
 
 ## Not yet
 

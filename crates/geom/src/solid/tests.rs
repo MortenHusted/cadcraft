@@ -442,6 +442,69 @@ fn a_box_on_a_finely_triangulated_face_is_told_apart_from_it() {
 }
 
 #[test]
+fn a_curved_face_tessellated_into_thin_strips_cuts_closed() {
+    // The curved side is 4000 strips 12 long and 0.01 wide, each strip's corners a few 1e-7
+    // off the line through its neighbours': finer than the weld once was.
+    let mut profile = vec![Vec2::new(0.0, 0.0), Vec2::new(40.0, 0.0)];
+    for i in (0..=4000).rev() {
+        let x = f64::from(i) / 100.0;
+        profile.push(Vec2::new(x, 5.0 + 0.002 * (x - 20.0) * (x - 20.0)));
+    }
+    let a = extrude(&[profile], 0.0, v(0.0, 0.0, 12.0)).unwrap();
+    let b = frustum(v(20.0, 5.0, -1.0), 10.83, 10.83, 8.0, circle_segments(10.83)).unwrap();
+    let d = bool_op(&a, &b, BoolOp::Difference);
+    let i = bool_op(&a, &b, BoolOp::Intersection);
+    let u = bool_op(&a, &b, BoolOp::Union);
+    for m in [&d, &i, &u] {
+        assert_closed(m);
+    }
+    assert_near(d.volume() + i.volume(), a.volume(), 1e-6);
+    assert_near(u.volume() + i.volume(), a.volume() + b.volume(), 1e-6);
+}
+
+/// A prism of `n` sides whose top is turned by `twist`: each side is a slightly bent quad, two
+/// triangles nearly in one plane.
+fn twisted_prism(n: u32, r: f64, h: f64, twist: f64) -> Mesh {
+    let mut m = Mesh::default();
+    for (z, turn) in [(0.0, 0.0), (h, twist)] {
+        for i in 0..n {
+            let a = 2.0 * PI * f64::from(i) / f64::from(n) + turn;
+            m.vertices.push(v(r * a.cos(), r * a.sin(), z));
+        }
+    }
+    m.vertices.extend([v(0.0, 0.0, 0.0), v(0.0, 0.0, h)]);
+    let (bottom, top) = (2 * n, 2 * n + 1);
+    for i in 0..n {
+        let j = (i + 1) % n;
+        m.triangles.extend([[bottom, j, i], [top, n + i, n + j], [i, j, n + j], [i, n + j, n + i]]);
+    }
+    m
+}
+
+#[test]
+fn slightly_bent_quads_cut_closed() {
+    // Where a face of the box crosses a side, the side's two triangles meet it in two segments
+    // at an angle of 1e-5 or less: the corner between them must be where both solids put it.
+    for twist in [1e-4, 1e-5] {
+        let a = twisted_prism(400, 10.0, 20.0, twist);
+        assert_closed(&a);
+        for k in 1..6 {
+            let s = f64::from(k);
+            let b = cuboid(v(6.0, -4.0 - 0.37 * s, 5.0 + 0.71 * s), v(13.0, 4.0 + 0.13 * s, 11.0 + 0.29 * s)).unwrap();
+            let b = b.transformed(&Mat4::rotate_about_axis(Vec3::ZERO, v(0.3, 0.2, 1.0), 0.1 * s));
+            let d = bool_op(&a, &b, BoolOp::Difference);
+            let i = bool_op(&a, &b, BoolOp::Intersection);
+            let u = bool_op(&a, &b, BoolOp::Union);
+            for m in [&d, &i, &u] {
+                assert!(m.check().is_closed(), "twist {twist} box {k}: {:?}", m.check());
+            }
+            assert_near(d.volume() + i.volume(), a.volume(), 1e-6);
+            assert_near(u.volume() + i.volume(), a.volume() + b.volume(), 1e-6);
+        }
+    }
+}
+
+#[test]
 fn many_sequential_cuts_stay_closed() {
     // A plate with a grid of holes and bosses, the way a printed part is built up.
     let mut part = cuboid(Vec3::ZERO, v(60.0, 86.0, 10.0)).unwrap();
