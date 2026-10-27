@@ -26,6 +26,22 @@ pub fn specs() -> Vec<CommandSpec> {
         Ask::Point("Specify point on the plane", "point"),
         Ask::Keyword("Delete source objects?", "erase", &["No", "Yes"]),
     ];
+    const ARRAY: &[Ask] = &[
+        Ask::Number("Enter the number of rows (---)", "rows"),
+        Ask::Number("Enter the number of columns (|||)", "columns"),
+        Ask::Number("Enter the number of levels (...)", "levels"),
+        Ask::Number("Specify the distance between rows (---)", "rowSpacing"),
+        Ask::Number("Specify the distance between columns (|||)", "columnSpacing"),
+        Ask::Number("Specify the distance between levels (...)", "levelSpacing"),
+    ];
+    const ALIGN: &[Ask] = &[
+        Ask::Point("Specify base point", "from1"),
+        Ask::Point("Specify second point", "from2"),
+        Ask::Point("Specify third point", "from3"),
+        Ask::Point("Specify first destination point", "to1"),
+        Ask::Point("Specify second destination point", "to2"),
+        Ask::Point("Specify third destination point", "to3"),
+    ];
     const SLICE: &[Ask] = &[
         Ask::Keyword("Specify slicing plane", "plane", &["XY", "YZ", "ZX"]),
         Ask::Point("Specify point on the plane", "point"),
@@ -46,6 +62,16 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Modify", "3D Operations", "3D Mirror"])
             .params("{handles?, plane: \"xy\"|\"yz\"|\"zx\" | normal: [x,y,z], point?: [x,y,z] (on the plane, default 0,0,0), erase?: false (keep the originals)} → {handles, skipped}")
             .interactive(|_| Ok(Box::new(SelectAsk::new("mirror3d", "MIRROR3D", MIRROR)))),
+        CommandSpec::new("3darray", "3D Array", run_3darray)
+            .menu(&["Modify", "3D Operations", "3D Array"])
+            .alias(&["3a"])
+            .params("{handles?, rows?: 1, columns?: 1, levels?: 1, spacing?: [dx (columns), dy (rows), dz (levels)] (or rowSpacing, columnSpacing, levelSpacing)} | {handles?, polar: true, count, angle?: 360 (degrees to fill), axis?: [[x,y,z], [x,y,z]] (default the Z axis through 0,0,0), rotate?: true} → {handles (the copies), skipped}")
+            .interactive(|_| Ok(Box::new(SelectAsk::new("3darray", "3DARRAY", ARRAY)))),
+        CommandSpec::new("3dalign", "3D Align", run_3dalign)
+            .menu(&["Modify", "3D Operations", "3D Align"])
+            .alias(&["3al"])
+            .params("{handles?, from: [p1, p2?, p3?], to: [q1, q2?, q3?]} (or from1..3, to1..3): moves p1 to q1, turns p1→p2 along q1→q2, and the plane of p1, p2, p3 onto that of q1, q2, q3 → {moved, skipped}")
+            .interactive(|_| Ok(Box::new(SelectAsk::new("3dalign", "3DALIGN", ALIGN)))),
         CommandSpec::new("slice", "Slice", run_slice)
             .menu(&["Modify", "3D Operations", "Slice"])
             .alias(&["sl"])
@@ -189,6 +215,176 @@ fn run_3drotate(s: &mut Session, p: &Value) -> Result<Value> {
     let dir = axis("3drotate", p)?;
     let angle = number("3drotate", p, "angle")?.ok_or_else(|| bad("3drotate", "`angle` (degrees) is required"))?;
     apply(s, &hs, &Mat4::rotate_about_axis(base, dir, rad(angle)))
+}
+
+/// Copies of `hs` placed by each of `placements` (objects a placement takes out of plan are
+/// skipped).
+fn copies(s: &mut Session, cmd: &str, hs: &[Handle], placements: &[Mat4]) -> Result<Value> {
+    if hs.len().saturating_mul(placements.len()) > curves::MAX_GEN {
+        return Err(bad(cmd, format!("more than {} copies", curves::MAX_GEN)));
+    }
+    let (mut made, mut skipped) = (Vec::new(), 0);
+    let space = s.space();
+    for h in hs {
+        let e = curves::entity(s, *h)?;
+        for m in placements {
+            match transformed(&e.kind, m) {
+                Some(k) => {
+                    let mut common = e.common.clone();
+                    common.xdata.clear();
+                    made.push(hex(s.doc_mut()?.add(&space, common, k)?));
+                }
+                None => skipped += 1,
+            }
+        }
+    }
+    Ok(json!({ "handles": made, "skipped": skipped }))
+}
+
+/// A whole number of copies `key` (at least 1).
+fn count(cmd: &str, p: &Value, key: &str, default: u64) -> Result<u64> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => v
+            .as_u64()
+            .or_else(|| v.as_f64().filter(|f| f.fract() == 0.0 && *f >= 1.0 && *f <= 1e6).map(|f| f as u64))
+            .filter(|n| *n >= 1)
+            .ok_or_else(|| bad(cmd, format!("`{key}` must be a whole number of at least 1"))),
+    }
+}
+
+fn run_3darray(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "3darray";
+    let hs = targets(s, p)?;
+    let mut placements = Vec::new();
+    if bool_or(p, "polar", false) {
+        let n = count(CMD, p, "count", 0)?;
+        let fill = rad(number(CMD, p, "angle")?.unwrap_or(360.0));
+        let (a, b) = match p
+            .get("axis")
+            .and_then(Value::as_array)
+            .map(|a| (a.first().and_then(super::point3_value), a.get(1).and_then(super::point3_value)))
+        {
+            None => (Vec3::ZERO, Vec3::Z),
+            Some((Some(a), Some(b))) if a.dist(b) > 1e-12 => (a, b),
+            Some(_) => return Err(bad(CMD, "`axis` must be two different points [[x,y,z], [x,y,z]]")),
+        };
+        // A full turn spaces the items evenly round it; a part turn puts the last at its end.
+        let step = if (fill.abs() - std::f64::consts::TAU).abs() < 1e-9 { fill / n as f64 } else { fill / (n.max(2) - 1) as f64 };
+        let rotate = bool_or(p, "rotate", true);
+        for k in 1..n {
+            let turn = Mat4::rotate_about_axis(a, b - a, step * k as f64);
+            placements.push(if rotate { turn } else { Mat4::IDENTITY });
+        }
+        if !rotate {
+            // Each copy moves with the middle of its object, without turning.
+            let mut out = Vec::new();
+            for h in &hs {
+                let e = curves::entity(s, *h)?;
+                let middle = match &e.kind {
+                    EntityKind::Solid3d(so) => so.bounds().center(),
+                    _ => cadcraft_doc::entity_bounds(s.doc()?, &e, 0).center().to3(0.0),
+                };
+                let moves: Vec<Mat4> =
+                    (1..n).map(|k| Mat4::translate(Mat4::rotate_about_axis(a, b - a, step * k as f64).apply(middle) - middle)).collect();
+                let r = copies(s, CMD, &[*h], &moves)?;
+                out.extend(r.get("handles").and_then(Value::as_array).cloned().unwrap_or_default());
+            }
+            return Ok(json!({ "handles": out, "skipped": 0 }));
+        }
+    } else {
+        let (rows, cols, levels) = (count(CMD, p, "rows", 1)?, count(CMD, p, "columns", 1)?, count(CMD, p, "levels", 1)?);
+        let spacing = point3(CMD, p, "spacing")?.unwrap_or_else(|| {
+            let g = |k: &str| p.get(k).and_then(Value::as_f64).unwrap_or(0.0);
+            Vec3::new(g("columnSpacing"), g("rowSpacing"), g("levelSpacing"))
+        });
+        if rows.saturating_mul(cols).saturating_mul(levels) > curves::MAX_GEN as u64 {
+            return Err(bad(CMD, format!("more than {} copies", curves::MAX_GEN)));
+        }
+        for l in 0..levels {
+            for r in 0..rows {
+                for c in 0..cols {
+                    if (l, r, c) != (0, 0, 0) {
+                        placements.push(Mat4::translate(Vec3::new(spacing.x * c as f64, spacing.y * r as f64, spacing.z * l as f64)));
+                    }
+                }
+            }
+        }
+    }
+    copies(s, CMD, &hs, &placements)
+}
+
+/// Up to three points `key` (`[p1, p2?, p3?]`, or `key1`..`key3`).
+fn align_points(cmd: &str, p: &Value, key: &str) -> Result<Vec<Vec3>> {
+    let listed = p.get(key).and_then(Value::as_array).map(|a| a.iter().map(super::point3_value).collect::<Option<Vec<_>>>());
+    let pts = match listed {
+        Some(pts) => pts.ok_or_else(|| bad(cmd, format!("`{key}` must be points [x, y, z]")))?,
+        None => (1..=3).map(|i| point3(cmd, p, &format!("{key}{i}"))).collect::<Result<Vec<_>>>()?.into_iter().flatten().collect(),
+    };
+    if pts.is_empty() || pts.len() > 3 {
+        return Err(bad(cmd, format!("`{key}` must be one to three points")));
+    }
+    Ok(pts)
+}
+
+/// An orthonormal frame from up to three points: along p1→p2, then towards p3. `None` when
+/// the points repeat or line up.
+fn frame(pts: &[Vec3]) -> Option<[Vec3; 3]> {
+    let (p1, p2, p3) = (pts.first()?, pts.get(1)?, pts.get(2)?);
+    let e1 = (*p2 - *p1).normalized();
+    let t = *p3 - *p1;
+    let e2 = (t - e1 * t.dot(e1)).normalized();
+    (e1 != Vec3::ZERO && e2 != Vec3::ZERO).then(|| [e1, e2, e1.cross(e2)])
+}
+
+fn run_3dalign(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "3dalign";
+    let hs = targets(s, p)?;
+    let (from, to) = (align_points(CMD, p, "from")?, align_points(CMD, p, "to")?);
+    if from.len() != to.len() {
+        return Err(bad(CMD, "`from` and `to` need as many points"));
+    }
+    let (Some(p1), Some(q1)) = (from.first().copied(), to.first().copied()) else { return Err(bad(CMD, "`from` and `to` are required")) };
+    // The turn: the least taking p1→p2 along q1→q2, or one frame onto the other.
+    let turn = match (from.len(), frame(&from), frame(&to)) {
+        (1, ..) => Mat4::IDENTITY,
+        (2, ..) => {
+            let (a, b) = (from.get(1).map_or(Vec3::ZERO, |v| (*v - p1).normalized()), to.get(1).map_or(Vec3::ZERO, |v| (*v - q1).normalized()));
+            if a == Vec3::ZERO || b == Vec3::ZERO {
+                return Err(bad(CMD, "the first and second points must differ"));
+            }
+            let axis = a.cross(b);
+            if axis.len() < 1e-12 {
+                if a.dot(b) > 0.0 {
+                    Mat4::IDENTITY
+                } else {
+                    Mat4::rotate_about_axis(Vec3::ZERO, if a.x.abs() < 0.9 { a.cross(Vec3::X) } else { a.cross(Vec3::Y) }, std::f64::consts::PI)
+                }
+            } else {
+                Mat4::rotate_about_axis(Vec3::ZERO, axis, a.dot(b).clamp(-1.0, 1.0).acos())
+            }
+        }
+        (_, Some(f), Some(g)) => {
+            let mut m = Mat4::IDENTITY;
+            for (i, row) in m.m.iter_mut().take(3).enumerate() {
+                for (j, cell) in row.iter_mut().take(3).enumerate() {
+                    *cell = (0..3).map(|k| comp(g[k], i) * comp(f[k], j)).sum();
+                }
+            }
+            m
+        }
+        _ => return Err(bad(CMD, "the three points must not repeat or line up")),
+    };
+    let m = Mat4::translate(p1 * -1.0).then(&turn).then(&Mat4::translate(q1));
+    apply(s, &hs, &m)
+}
+
+fn comp(v: Vec3, i: usize) -> f64 {
+    match i {
+        0 => v.x,
+        1 => v.y,
+        _ => v.z,
+    }
 }
 
 /// The plane `{plane: "xy"|"yz"|"zx" | normal: [x,y,z], point?}` as a point and unit normal.

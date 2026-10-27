@@ -1,4 +1,4 @@
-//! Solid primitives: BOX, WEDGE, CYLINDER, CONE, SPHERE and TORUS.
+//! Solid primitives: BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS and PYRAMID.
 
 use cadcraft_geom::solid::{Mesh, SolidError, primitives};
 use cadcraft_geom::{Vec2, Vec3};
@@ -39,6 +39,11 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["tor"])
             .params("{center: [x,y,z], radius | diameter (to the tube's center), tubeRadius | tubeDiameter, segments?} → {handle, volume}")
             .interactive(|_| Ok(Box::new(Steps::new("TORUS", &TORUS_ASKS, build_torus)))),
+        CommandSpec::new("pyramid", "Pyramid", run_pyramid)
+            .menu(&["Draw", "3D Modeling", "Pyramid"])
+            .alias(&["pyr"])
+            .params("{center: [x,y,z] (of the base), radius (to the middle of a side; to a corner with inscribed: true), sides?: 4 (3 to 32), height, topRadius? (default 0: pointed), rotation?: degrees} → {handle, volume}")
+            .interactive(|_| Ok(Box::new(Steps::new("PYRAMID", &PYRAMID_ASKS, build_pyramid)))),
     ]
 }
 
@@ -124,6 +129,44 @@ fn run_sphere(s: &mut Session, p: &Value) -> Result<Value> {
     created(s, "sphere", primitives::sphere(c, r, n))
 }
 
+/// A pyramid (or its frustum) on a regular polygon of `sides` about `c`: `r` to the middle of
+/// a side (circumscribed, as AutoCAD draws it by default) or to a corner (`inscribed`).
+fn pyramid(c: Vec3, r: f64, top: f64, h: f64, sides: usize, inscribed: bool, rotation: f64) -> std::result::Result<Mesh, SolidError> {
+    if !(3..=32).contains(&sides) {
+        return Err(SolidError::Degenerate("A pyramid has 3 to 32 sides.".into()));
+    }
+    if !(r.is_finite() && r > 0.0 && top.is_finite() && top >= 0.0 && h.is_finite() && h != 0.0) {
+        return Err(SolidError::Degenerate("The radius and height must be positive numbers.".into()));
+    }
+    let half = std::f64::consts::PI / sides as f64;
+    let to_corner = if inscribed { 1.0 } else { 1.0 / half.cos() };
+    // Circumscribed, the first side's middle lies along `rotation`; inscribed, its first corner.
+    let start = rotation + if inscribed { 0.0 } else { half };
+    let ring = |radius: f64, z: f64| -> Vec<Vec3> {
+        (0..sides).map(|k| Vec2::polar(c.xy(), radius * to_corner, start + 2.0 * half * k as f64).to3(c.z + z)).collect()
+    };
+    let tip = if top > 0.0 { ring(top, h) } else { vec![c + Vec3::new(0.0, 0.0, h)] };
+    cadcraft_geom::solid::sweep::loft(&[ring(r, 0.0), tip], true)
+}
+
+fn run_pyramid(s: &mut Session, p: &Value) -> Result<Value> {
+    let c = point3_req("pyramid", p, "center")?;
+    let r = radius_req("pyramid", p, "")?;
+    let h = number("pyramid", p, "height")?.ok_or_else(|| bad("pyramid", "`height` is required"))?;
+    let top = number("pyramid", p, "topRadius")?.unwrap_or(0.0);
+    let sides = match p.get("sides") {
+        None | Some(Value::Null) => 4,
+        Some(v) => v
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| (3..=32).contains(n))
+            .ok_or_else(|| bad("pyramid", "`sides` must be a whole number from 3 to 32"))?,
+    };
+    let inscribed = p.get("inscribed").and_then(Value::as_bool).unwrap_or(false);
+    let rotation = cadcraft_geom::rad(number("pyramid", p, "rotation")?.unwrap_or(0.0));
+    created(s, "pyramid", pyramid(c, r, top, h, sides, inscribed, rotation))
+}
+
 fn run_torus(s: &mut Session, p: &Value) -> Result<Value> {
     let c = point3_req("torus", p, "center")?;
     let r = radius_req("torus", p, "")?;
@@ -146,6 +189,7 @@ const BOX_ASKS: [Ask; 3] = [Ask::Point("Specify first corner"), Ask::Point("Spec
 const ROUND_ASKS: [Ask; 3] = [Ask::Point("Specify center point of base"), Ask::Distance("Specify base radius"), Ask::Distance("Specify height")];
 const SPHERE_ASKS: [Ask; 2] = [Ask::Point("Specify center point"), Ask::Distance("Specify radius")];
 const TORUS_ASKS: [Ask; 3] = [Ask::Point("Specify center point"), Ask::Distance("Specify radius"), Ask::Distance("Specify tube radius")];
+const PYRAMID_ASKS: [Ask; 3] = [Ask::Point("Specify center point of base"), Ask::Distance("Specify base radius"), Ask::Distance("Specify height")];
 
 type Build = fn(&[Vec2], &[f64], f64) -> std::result::Result<Mesh, SolidError>;
 
@@ -191,6 +235,13 @@ fn build_torus(pts: &[Vec2], d: &[f64], z: f64) -> std::result::Result<Mesh, Sol
     match (pts, d) {
         ([c], [r, t]) => primitives::torus(c.to3(z), *r, *t, primitives::circle_segments(*r + *t)),
         _ => Err(SolidError::Degenerate("A center, a radius and a tube radius are needed.".into())),
+    }
+}
+
+fn build_pyramid(pts: &[Vec2], d: &[f64], z: f64) -> std::result::Result<Mesh, SolidError> {
+    match (pts, d) {
+        ([c], [r, h]) => pyramid(c.to3(z), *r, 0.0, *h, 4, false, 0.0),
+        _ => Err(SolidError::Degenerate("A center, a radius and a height are needed.".into())),
     }
 }
 

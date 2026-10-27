@@ -21,6 +21,8 @@ dialog. JSON points are `[x, y, z]` (a missing z is 0).
 | CONE | `{center, radius \| diameter, topRadius?, height, segments?}` (a frustum when `topRadius` > 0) |
 | SPHERE | `{center, radius \| diameter, segments?}` |
 | TORUS | `{center, radius \| diameter, tubeRadius \| tubeDiameter, segments?}` (`radius` to the tube's center) |
+| PYRAMID | `{center, radius, sides? (4), inscribed?, height, topRadius?, rotation?}`: `radius` to the middle of a side (to a corner with `inscribed`); a frustum when `topRadius` > 0 |
+| POLYSOLID | `{points \| object, closed?, width?, height?, justify?}`: a wall of `width` and `height` along level points or a line, arc, circle, polyline or spline, centred on the path or standing on its `left` or `right`; corners are mitred |
 | EXTRUDE | `{handles, height \| direction, keep?}`: circles, full ellipses, closed polylines (fillets and arcs too), closed splines and planar 3D polylines become solids; a region's islands become holes; TEXT in a TrueType font becomes solid lettering (counters as holes), to emboss with UNION or engrave with SUBTRACT |
 | REVOLVE | `{handles, axis: [[x,y],[x,y]], angle? (360)}` about an axis in the profiles' plane |
 | SWEEP | `{handles, path, twist? (degrees), scale? (1), base?, keep?}`: each profile carried along `path`, a line, arc, circle, ellipse, polyline, 3D polyline, spline or helix (its handle) or a list of points. The profile stands across the path at its start, its centroid (or `base`) on the path, its Y up and its X to the left looking along the path, and turns as little as it can along it; corners are mitred. `twist` turns it and `scale` grows or shrinks it from start to end |
@@ -52,6 +54,8 @@ it to 0.6 outside, its root well inside the core:
 | 3DMOVE | `{handles, displacement}` or `{handles, from, to}` |
 | 3DROTATE | `{handles, base?, axis: "x" \| "y" \| "z" \| [x,y,z], angle}` (degrees) |
 | MIRROR3D | `{handles, plane: "xy" \| "yz" \| "zx" \| normal, point?, erase?}` (keeps the originals by default) |
+| 3DARRAY | `{handles, rows?, columns?, levels?, spacing: [dx, dy, dz]}`, or `{handles, polar: true, count, angle? (360), axis?, rotate? (true)}` round an axis through two points (default Z through the origin): the copies |
+| 3DALIGN | `{handles, from: [p1, p2?, p3?], to: [q1, q2?, q3?]}`: p1 onto q1, the direction p1→p2 along q1→q2, the plane of the three onto the other's |
 | SLICE | `{handles, plane \| normal, point?, keep?: "both" \| "above" \| "below"}` |
 
 The booleans return `closed`: whether the result is one watertight solid. It is false only
@@ -144,7 +148,7 @@ boxes, cylinders and spheres.
 
 No 3D view in the drawing area (solids show as plan wireframes; the Render window shows them in
 3D), no UCS, surfaces,
-meshes, PYRAMID, POLYSOLID, SOLIDEDIT, 3DALIGN or 3DARRAY, and no STEP import. LOFT takes
+meshes or SOLIDEDIT, and no STEP import. LOFT takes
 cross-sections parallel to XY without holes, and no guides or path.
 FILLETEDGE has no variable radius and rounds only corners where three edges of one radius
 meet with a ball; other corners keep where the cuts cross. See F24 in [gaps.md](gaps.md).

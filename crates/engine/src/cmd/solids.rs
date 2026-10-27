@@ -1,8 +1,8 @@
-//! 3D solid modeling: primitives (BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS), solids from
-//! profiles (EXTRUDE, REVOLVE, SWEEP, LOFT), placing solids in 3D (3DMOVE, 3DROTATE, MIRROR3D), rounding and
-//! bevelling edges (FILLETEDGE, CHAMFEREDGE), SLICE, INTERFERE, and output for 3D printing
-//! (STLOUT, 3DPRINT). UNION, SUBTRACT, INTERSECT and
-//! MASSPROP (`inquiry::regions`) hand the 3D solids they are given to [`combine`] and
+//! 3D solid modeling: primitives (BOX, WEDGE, CYLINDER, CONE, SPHERE, TORUS, PYRAMID), solids
+//! from profiles (EXTRUDE, REVOLVE, SWEEP, LOFT, POLYSOLID), placing solids in 3D (3DMOVE,
+//! 3DROTATE, MIRROR3D, 3DARRAY, 3DALIGN), rounding and bevelling edges (FILLETEDGE,
+//! CHAMFEREDGE), SLICE, INTERFERE, and output for 3D printing (STLOUT, 3DPRINT). UNION,
+//! SUBTRACT, INTERSECT and MASSPROP (`inquiry::regions`) hand the 3D solids they are given to [`combine`] and
 //! [`massprop`].
 //!
 //! Solids are closed meshes ([`cadcraft_geom::solid`]). The JSON forms take 3D points as

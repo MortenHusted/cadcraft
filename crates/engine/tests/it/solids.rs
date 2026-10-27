@@ -511,3 +511,73 @@ fn loft_joins_cross_sections_and_3dmove_raises_them() {
     let e = s.execute("loft", &json!({"handles": [one]})).unwrap_err().to_string();
     assert!(e.contains("at least two"), "{e}");
 }
+
+#[test]
+fn pyramid_and_polysolid_have_their_volumes() {
+    let mut s = Session::new();
+    // Four sides about a radius of 5 to the middle of each: a 10 × 10 base, a third of it times
+    // the height.
+    let r = run(&mut s, "pyramid", json!({"center": [0, 0, 0], "radius": 5, "height": 6}));
+    near(r["volume"].as_f64().unwrap(), 100.0 * 6.0 / 3.0, 1e-9);
+    let b = solid(&s, &handle(&r)).bounds();
+    near(b.max.x - b.min.x, 10.0, 1e-9);
+    // Six sides to the corners, cut flat at half the radius: a frustum.
+    let r = run(&mut s, "pyramid", json!({"center": [20, 0, 0], "radius": 4, "sides": 6, "inscribed": true, "topRadius": 2, "height": 3}));
+    let hex = |r: f64| 3.0 * 3f64.sqrt() / 2.0 * r * r;
+    let (a1, a2) = (hex(4.0), hex(2.0));
+    near(r["volume"].as_f64().unwrap(), 3.0 / 3.0 * (a1 + a2 + (a1 * a2).sqrt()), 1e-9);
+    assert!(solid(&s, &handle(&r)).mesh().check().is_closed());
+    // A wall 0.5 wide and 3 high along an L of 10 then 6: mitred, its centre line 16 long.
+    let r = run(&mut s, "polysolid", json!({"points": [[0, 0], [10, 0], [10, 6]], "width": 0.5, "height": 3}));
+    near(r["volume"].as_f64().unwrap(), 0.5 * 3.0 * 16.0, 1e-9);
+    let w = solid(&s, &handle(&r));
+    assert!(w.mesh().check().is_closed());
+    near(w.bounds().min.y, -0.25, 1e-9);
+    // Standing on the left of the path, closed round a square: a frame 1 thick inside 10 × 10.
+    let r =
+        run(&mut s, "polysolid", json!({"points": [[0, 0], [10, 0], [10, 10], [0, 10]], "closed": true, "width": 1, "height": 2, "justify": "left"}));
+    near(r["volume"].as_f64().unwrap(), (100.0 - 64.0) * 2.0, 1e-9);
+    let b = solid(&s, &handle(&r)).bounds();
+    assert!(b.min.x.abs() < 1e-9 && (b.max.x - 10.0).abs() < 1e-9);
+    // From a circle, which is erased.
+    let c = handle(&run(&mut s, "circle", json!({"center": [50, 50], "radius": 10})));
+    let r = run(&mut s, "polysolid", json!({"object": c, "width": 1, "height": 1}));
+    assert!(solid(&s, &handle(&r)).mesh().check().is_closed());
+    assert!(s.doc().unwrap().entity(Handle::parse_hex(&c).unwrap()).is_none());
+    assert!(s.execute("pyramid", &json!({"center": [0, 0, 0], "radius": 5, "height": 6, "sides": 2})).is_err());
+    assert!(s.execute("polysolid", &json!({"points": [[0, 0], [1, 0]], "justify": "up"})).is_err());
+}
+
+#[test]
+fn array_and_align_in_3d() {
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [1, 1, 1]})));
+    let line = handle(&run(&mut s, "line", json!({"points": [[0, 0], [1, 0]]})));
+    // 2 rows × 3 columns × 2 levels: eleven copies of each.
+    let r = run(&mut s, "3darray", json!({"handles": [b, line], "rows": 2, "columns": 3, "levels": 2, "spacing": [2, 3, 4]}));
+    assert_eq!(r["handles"].as_array().unwrap().len(), 22);
+    let top = solids(&s).iter().map(|so| so.bounds().max).fold(cadcraft_engine::geom::Vec3::ZERO, |m, p| m.max(p));
+    assert_eq!((top.x, top.y, top.z), (5.0, 4.0, 5.0));
+    // Polar: six round the Z axis through (10, 0), turning with it.
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [12, -0.5, 0], "opposite": [14, 0.5, 1]})));
+    let r = run(&mut s, "3darray", json!({"handles": [b], "polar": true, "count": 6, "axis": [[10, 0, 0], [10, 0, 1]]}));
+    assert_eq!(r["handles"].as_array().unwrap().len(), 5);
+    let opposite = solid(&s, r["handles"][2].as_str().unwrap()).bounds();
+    near(opposite.min.x, 6.0, 1e-9);
+    near(opposite.max.y - opposite.min.y, 1.0, 1e-9);
+    // 3DALIGN: X onto Y and Y onto Z, so the box Z ends up along X (right-handed).
+    let mut s = Session::new();
+    let b = handle(&run(&mut s, "box", json!({"corner": [0, 0, 0], "opposite": [4, 2, 1]})));
+    run(&mut s, "3dalign", json!({"handles": [b], "from": [[0, 0, 0], [4, 0, 0], [0, 2, 0]], "to": [[10, 10, 10], [10, 14, 10], [10, 10, 12]]}));
+    let bb = solid(&s, &b).bounds();
+    for (got, want) in [(bb.min.x, 10.0), (bb.max.x, 11.0), (bb.min.y, 10.0), (bb.max.y, 14.0), (bb.min.z, 10.0), (bb.max.z, 12.0)] {
+        near(got, want, 1e-9);
+    }
+    near(solid(&s, &b).mass_props().volume, 8.0, 1e-9);
+    let e = s
+        .execute("3dalign", &json!({"handles": [b], "from": [[0, 0, 0], [1, 0, 0], [2, 0, 0]], "to": [[0, 0, 0], [1, 0, 0], [0, 1, 0]]}))
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("line up"), "{e}");
+}
