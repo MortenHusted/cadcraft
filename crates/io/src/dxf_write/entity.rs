@@ -220,7 +220,7 @@ pub(super) fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: boo
                 w.i(70, 64);
                 w.i(71, part.vertices.len() as i64);
                 w.i(72, part.faces.len() as i64);
-                w.xdata(crate::dxf_solid::xdata(i, count));
+                w.xdata(crate::dxf_solid::xdata(e.handle, i, count));
                 let vertex = |w: &mut W, subclass: &str, at: Vec3, flags: i64| {
                     let vh = w.h();
                     w.s(0, "VERTEX");

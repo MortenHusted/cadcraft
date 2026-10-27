@@ -3,13 +3,15 @@
 //! A 3DSOLID's own data is ACIS, which CADCraft doesn't write. Its closed mesh is written as a
 //! polyface mesh (POLYLINE with flag 64, the DXF Reference's "polyface mesh"): every program
 //! reading R2000 DXF sees the surface, with the edges between faces that meet smoothly hidden.
-//! `CADCRAFT` xdata on the POLYLINE (`1000 SOLID3D`, then the part number and the number of
-//! parts as `1070`s) makes it a solid again when CADCraft reads it. A polyface numbers its
-//! vertices and faces with 16-bit integers, so a bigger solid is written as consecutive parts.
+//! `CADCRAFT` xdata on the POLYLINE (`1000 SOLID3D`, the handle of the solid's first part as a
+//! `1005`, then the part number and the number of parts as `1070`s) makes it a solid again when
+//! CADCraft reads it. A polyface numbers its vertices and faces with 16-bit integers, so a bigger
+//! solid is written as consecutive parts; a part joins the one before it only as the next part of
+//! the same solid.
 
 use std::collections::{HashMap, HashSet};
 
-use cadcraft_doc::Solid3d;
+use cadcraft_doc::{Handle, Solid3d};
 use cadcraft_dxf::Tag;
 use cadcraft_geom::Vec3;
 use cadcraft_geom::solid::{FEATURE_ANGLE, Mesh};
@@ -63,18 +65,37 @@ pub(crate) fn parts(s: &Solid3d) -> Vec<Part> {
     out
 }
 
-/// The xdata marking part `index` of `count`.
-pub(crate) fn xdata(index: usize, count: usize) -> Vec<Tag> {
-    vec![Tag::s(1001, dxf_ext::APP), Tag::s(1000, MARKER), Tag::i(1070, index as i64), Tag::i(1070, count as i64)]
+/// Which solid a polyface was written for: part `index` of `count` of the solid whose first part
+/// has the handle `first` (`None` when the file doesn't say).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PartOf {
+    pub first: Option<Handle>,
+    pub index: usize,
+    pub count: usize,
 }
 
-/// Part number and count of a polyface POLYLINE written for a solid, from its tags.
-pub(crate) fn part_of(tags: &[Tag]) -> Option<(usize, usize)> {
+impl PartOf {
+    /// Whether this is the part that comes right after `prev`, of the same solid.
+    pub(crate) fn follows(&self, prev: &PartOf) -> bool {
+        self.first.is_some() && self.first == prev.first && self.count == prev.count && self.index == prev.index + 1
+    }
+}
+
+/// The xdata marking part `index` of `count` of the solid whose first part has the handle
+/// `first`.
+pub(crate) fn xdata(first: Handle, index: usize, count: usize) -> Vec<Tag> {
+    vec![Tag::s(1001, dxf_ext::APP), Tag::s(1000, MARKER), Tag::s(1005, first.hex()), Tag::i(1070, index as i64), Tag::i(1070, count as i64)]
+}
+
+/// Which solid a polyface POLYLINE was written for, from its tags.
+pub(crate) fn part_of(tags: &[Tag]) -> Option<PartOf> {
     let x = dxf_ext::xdata(tags, dxf_ext::APP);
     let at = x.iter().position(|t| t.code == 1000 && t.str() == MARKER)?;
-    let mut nums = x.iter().skip(at + 1).filter(|t| t.code == 1070).filter_map(|t| usize::try_from(t.str().trim().parse::<i64>().ok()?).ok());
+    let rest = x.get(at + 1..).unwrap_or(&[]);
+    let first = rest.iter().find(|t| t.code == 1005).and_then(|t| Handle::parse_hex(&t.str()));
+    let mut nums = rest.iter().filter(|t| t.code == 1070).filter_map(|t| usize::try_from(t.str().trim().parse::<i64>().ok()?).ok());
     let (index, count) = (nums.next()?, nums.next()?);
-    (index < count && count <= MAX_PARTS).then_some((index, count))
+    (index < count && count <= MAX_PARTS).then_some(PartOf { first, index, count })
 }
 
 /// The solid of one part's vertices and face records (indices 71–74; a quad gives two

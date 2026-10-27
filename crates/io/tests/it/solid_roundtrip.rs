@@ -51,20 +51,60 @@ fn solid_survives_save_and_reopen_as_a_polyface() {
 }
 
 #[test]
-fn a_solid_too_big_for_one_polyface_is_written_in_parts() {
-    let ball = primitives::sphere(Vec3::new(1.0, 2.0, 3.0), 50.0, 400).unwrap();
-    assert!(ball.vertices.len() > 32_767);
-    let s = Solid3d::new(ball);
+fn solids_too_big_for_one_polyface_are_written_in_parts_and_come_back_apart() {
+    let balls = [Vec3::new(1.0, 2.0, 3.0), Vec3::new(200.0, 0.0, 0.0)].map(|c| Solid3d::new(primitives::sphere(c, 50.0, 400).unwrap()));
+    assert!(balls[0].mesh().vertices.len() > 32_767);
     let mut d = Drawing::new_metric();
-    d.add(&Space::Model, Common::default(), EntityKind::Solid3d(s.clone())).unwrap();
+    for s in &balls {
+        d.add(&Space::Model, Common::default(), EntityKind::Solid3d(s.clone())).unwrap();
+    }
     let saved = cadcraft_io::write_dxf(&d);
     let polylines = entity_records(&saved).into_iter().filter(|(k, _)| k == "POLYLINE").count();
-    assert!(polylines >= 2, "{polylines} parts");
+    assert!(polylines >= 4, "{polylines} parts");
     let back = solids(&cadcraft_io::read_dxf(saved.as_bytes()).unwrap());
-    assert_eq!(back.len(), 1);
-    assert!(back[0].mesh().check().is_closed());
-    assert_eq!(back[0].mesh().triangles.len(), s.mesh().triangles.len());
-    assert!((back[0].mass_props().volume - s.mass_props().volume).abs() < 1e-6);
+    assert_eq!(back.len(), 2);
+    for (b, s) in back.iter().zip(&balls) {
+        assert!(b.mesh().check().is_closed());
+        assert_eq!(b.mesh().triangles.len(), s.mesh().triangles.len());
+        assert!((b.mass_props().volume - s.mass_props().volume).abs() < 1e-6);
+        assert!(b.bounds().center().dist(s.bounds().center()) < 1e-9);
+    }
+}
+
+/// A tetrahedron at `x` as a polyface marked part `index` of `count` of the solid whose first
+/// part has the handle `first`.
+fn tetrahedron_part(handle: &str, first: &str, index: usize, count: usize, x: f64) -> String {
+    let mut s = format!(
+        "0\nPOLYLINE\n5\n{handle}\n8\n0\n66\n1\n10\n0.0\n20\n0.0\n30\n0.0\n70\n64\n71\n4\n72\n4\n\
+         1001\nCADCRAFT\n1000\nSOLID3D\n1005\n{first}\n1070\n{index}\n1070\n{count}\n"
+    );
+    for [px, py, pz] in [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]] {
+        s += &format!("0\nVERTEX\n8\n0\n10\n{}\n20\n{py}\n30\n{pz}\n70\n192\n", px + x);
+    }
+    for [a, b, c] in [[1, 3, 2], [1, 2, 4], [1, 4, 3], [2, 3, 4]] {
+        s += &format!("0\nVERTEX\n8\n0\n10\n0.0\n20\n0.0\n30\n0.0\n70\n128\n71\n{a}\n72\n{b}\n73\n{c}\n");
+    }
+    s + "0\nSEQEND\n8\n0\n"
+}
+
+#[test]
+fn a_part_joins_only_the_solid_it_is_the_next_part_of() {
+    let read = |parts: &[String]| {
+        let dxf = format!("0\nSECTION\n2\nENTITIES\n{}0\nENDSEC\n0\nEOF\n", parts.concat());
+        solids(&cadcraft_io::read_dxf(dxf.as_bytes()).unwrap()).iter().map(|s| s.mesh().triangles.len()).collect::<Vec<_>>()
+    };
+    assert_eq!(read(&[tetrahedron_part("20", "20", 0, 2, 0.0), tetrahedron_part("21", "20", 1, 2, 5.0)]), vec![8]);
+    // A part after a whole solid, a part of another solid, a part out of turn and a part read
+    // twice each stay a solid of their own.
+    for parts in [
+        vec![tetrahedron_part("20", "20", 0, 1, 0.0), tetrahedron_part("21", "40", 1, 2, 5.0)],
+        vec![tetrahedron_part("20", "20", 0, 2, 0.0), tetrahedron_part("21", "40", 1, 2, 5.0)],
+        vec![tetrahedron_part("20", "20", 0, 3, 0.0), tetrahedron_part("21", "20", 2, 3, 5.0)],
+    ] {
+        assert_eq!(read(&parts), vec![4, 4]);
+    }
+    let twice = [tetrahedron_part("20", "20", 0, 2, 0.0), tetrahedron_part("21", "20", 1, 2, 5.0), tetrahedron_part("22", "20", 1, 2, 9.0)];
+    assert_eq!(read(&twice), vec![8, 4]);
 }
 
 #[test]

@@ -11,6 +11,8 @@ pub(super) fn parse_entities(
     table_cells_left: &mut usize,
 ) -> Vec<(Option<String>, bool, Entity)> {
     let mut out = Vec::new();
+    // The part of a big solid that the last entity read ends with; that solid's next part joins it.
+    let mut open: Option<crate::dxf_solid::PartOf> = None;
     let mut i = 0;
     while let Some((kind, tags)) = recs.get(i) {
         let t = T(tags);
@@ -61,18 +63,25 @@ pub(super) fn parse_entities(
                 None => d.new_handle(),
             };
             entity_extras(kind, tags, h, &mut k, rx);
-            // A big solid comes in consecutive parts: the later ones join the first.
-            if let EntityKind::Solid3d(part) = &k
-                && crate::dxf_solid::part_of(tags).is_some_and(|(n, _)| n > 0)
+            // A big solid comes in consecutive parts: each joins the solid before it when it is
+            // that solid's next part. Any other part is a solid of its own.
+            let part = match &k {
+                EntityKind::Solid3d(_) => crate::dxf_solid::part_of(tags),
+                _ => None,
+            };
+            if let (EntityKind::Solid3d(p), Some(next)) = (&k, part)
+                && open.is_some_and(|prev| next.follows(&prev))
                 && let Some((_, _, Entity { kind: EntityKind::Solid3d(whole), .. })) = out.last_mut()
             {
-                *whole = crate::dxf_solid::join(whole, part);
+                *whole = crate::dxf_solid::join(whole, p);
+                open = Some(next);
                 continue;
             }
             let more: Vec<_> =
                 extra.into_iter().map(|f| (owner.clone(), paper, Entity { handle: d.new_handle(), common: c.clone(), kind: f })).collect();
             out.push((owner, paper, Entity { handle: h, common: c, kind: k }));
             out.extend(more);
+            open = part;
         } else if kind == "HATCH" {
             // Without boundary data. The other records `entity` returns nothing for are read
             // elsewhere (the writer's paper viewport, the loops of a region).
