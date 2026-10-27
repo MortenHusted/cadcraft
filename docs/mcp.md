@@ -82,6 +82,8 @@ only through MCP.
 5. `execute {"command": "subtract", "params": {"from": ["<plate>"], "remove": ["<cylinder>"]}}`:
    `closed: true` says the result is one watertight solid
 6. `render {"view": "se"}` — look at it; `execute {"command": "massprop", ...}` for volume and size
-7. `save {"path": "part.3mf"}` — open it in the slicer
+7. `execute {"command": "printcheck", "params": {"handles": ["<plate>"]}}` — overhangs, faces in
+   mid air, bed contact
+8. `save {"path": "part.3mf"}` — open it in the slicer
 
 [solids.md](solids.md) lists the 3D commands and their parameters.

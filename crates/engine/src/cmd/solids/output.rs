@@ -29,6 +29,10 @@ pub fn specs() -> Vec<CommandSpec> {
             .alias(&["rr"])
             .params("{handles?: solids (default: every visible solid in model space), view?: top|bottom|front|back|left|right|se|sw|ne|nw (default se) | [x,y,z] (towards the viewer), width?: 1200, height?: 900, edges?: true, path?: \"NAME.png\" (else base64 `data`)} → a shaded PNG of the solids")
             .noundo(),
+        CommandSpec::new("printcheck", "3D Print Check", run_printcheck)
+            .params("{handles?: solids (default: the selection), limit?: degrees from vertical an overhang may lean (default 46), ceiling?: degrees past which a face is a ceiling, not an overhang (default 85), maxOverhang?: overhang area allowed (default 150), bed?: [x,y,z] build volume} → per solid: closed, size, bedContact, overhangArea and bands by height, floating faces, problems; `ok` when nothing was found")
+            .noundo()
+            .interactive(|_| Ok(Box::new(SelectRun::new("printcheck", "PRINTCHECK")))),
         CommandSpec::new("stlout", "STL Out", run_stlout)
             .params("{handles?: solids (default: the selection), path: \"NAME.stl\"} → {path, bytes, solids, open}: binary STL")
             .noundo()
@@ -270,6 +274,73 @@ fn run_render(s: &mut Session, p: &Value) -> Result<Value> {
         }
         None => Ok(json!({ "data": super::super::file::base64_encode(&png), "picture": out })),
     }
+}
+
+/// Whether each solid prints standing as it is: closed, fits the bed, lies on it, no steep
+/// overhangs, nothing starting in mid air (`geom::solid::printability`).
+fn run_printcheck(s: &mut Session, p: &Value) -> Result<Value> {
+    use cadcraft_geom::solid::printability;
+    let num = |key: &str, default: f64| super::number("printcheck", p, key).map(|v| v.unwrap_or(default));
+    let (limit, ceiling, max_overhang) = (num("limit", 46.0)?, num("ceiling", 85.0)?, num("maxOverhang", 150.0)?);
+    if !(0.0..90.0).contains(&limit) || !(limit..=90.0).contains(&ceiling) || max_overhang < 0.0 {
+        return Err(bad("printcheck", "`limit` must be 0 to 90 degrees, `ceiling` from `limit` to 90, `maxOverhang` not negative"));
+    }
+    let bed = super::point3("printcheck", p, "bed")?;
+    let solids = solids_in(s, &targets(s, p)?)?;
+    if solids.is_empty() {
+        return Err(bad("printcheck", "select 3D solids to check"));
+    }
+    let f = |v: f64| format!("{v:.2}");
+    let (mut out, mut lines, mut all_ok) = (Vec::new(), Vec::new(), true);
+    for (h, so) in &solids {
+        let r = printability::check(so.mesh(), limit, ceiling);
+        let size = so.bounds().size();
+        let closed = so.mesh().check().is_closed();
+        let mut problems: Vec<String> = Vec::new();
+        if !closed {
+            problems.push("the surface is not closed: a slicer has to repair it".into());
+        }
+        if let Some(b) = bed.filter(|b| size.x > b.x || size.y > b.y || size.z > b.z) {
+            problems.push(format!(
+                "{} x {} x {} is larger than the build volume {} x {} x {}",
+                f(size.x),
+                f(size.y),
+                f(size.z),
+                f(b.x),
+                f(b.y),
+                f(b.z)
+            ));
+        }
+        if r.bed_contact <= 0.0 {
+            problems.push("no face lies flat on the bed".into());
+        }
+        if r.overhang_area > max_overhang {
+            let worst = r
+                .overhang_bands
+                .first()
+                .map(|b| format!(", most at z {} to {} ({}° to {}°)", f(b.z), f(b.z + printability::BAND), b.min_angle.round(), b.max_angle.round()))
+                .unwrap_or_default();
+            problems.push(format!("{} of overhang steeper than {limit}° from vertical{worst}", f(r.overhang_area)));
+        }
+        if let Some(fl) = r.floating.first() {
+            problems.push(format!(
+                "{} face(s) start in mid air with nothing under them (the largest, {}, at z {}): they need support or must bridge",
+                r.floating.len(),
+                f(fl.area),
+                f(fl.z)
+            ));
+        }
+        all_ok &= problems.is_empty();
+        lines.push(if problems.is_empty() { format!("{}: ready to print.", h.hex()) } else { format!("{}: {}.", h.hex(), problems.join("; ")) });
+        out.push(json!({
+            "handle": hex(*h), "ok": problems.is_empty(), "closed": closed, "volume": so.mass_props().volume,
+            "size": [size.x, size.y, size.z], "bedContact": r.bed_contact, "overhangArea": r.overhang_area,
+            "overhangBands": r.overhang_bands.iter().take(5).map(|b| json!({"z": b.z, "area": b.area, "minAngle": b.min_angle, "maxAngle": b.max_angle})).collect::<Vec<_>>(),
+            "floating": r.floating.iter().take(20).map(|x| json!({"z": x.z, "area": x.area, "at": [x.at.x, x.at.y, x.at.z]})).collect::<Vec<_>>(),
+            "problems": problems,
+        }));
+    }
+    Ok(json!({ "ok": all_ok, "solids": out, "message": lines.join("\n") }))
 }
 
 fn run_stlout(s: &mut Session, p: &Value) -> Result<Value> {

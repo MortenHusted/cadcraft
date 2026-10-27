@@ -50,9 +50,16 @@ objects only when the transform keeps them in plan.
 - INTERFERE `{first, second?, create?}` finds the pairs of solids that overlap and their common
   volume (touching faces don't count), and with `create` adds each overlap as a solid: check
   clearances between mating parts before printing them.
-- RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid) draws a shaded picture of the solids
-  (default south-east isometric; `top`, `front`, `right`, `se`, `nw` … or any direction): the
-  way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
+- PRINTCHECK `{handles?, limit?, ceiling?, maxOverhang?, bed?}` says whether a solid prints on
+  an FDM printer standing as it is (Z up, its lowest point on the bed): whether it is closed,
+  fits the build volume `bed` and lies flat on the bed; the area of overhangs leaning more than
+  `limit` (46°) from vertical, summed by 5-unit bands of height so the culprit stands out
+  (faces past `ceiling`, 85°, are ceilings, not overhangs); and the faces that start in mid air
+  with nothing of the solid under them (including roofs that can only bridge). `ok` is true
+  when it finds nothing; `problems` says what it found, in words.
+- RENDER `{handles?, view?, width?, height?, edges?, path?}` (default: every visible solid)
+  draws a shaded picture of the solids (default south-east isometric; `top`, `front`, `right`,
+  `se`, `nw` … or any direction): the way an agent looks at what it built. The MCP `render` tool with `view` returns it as an image.
   Typed or chosen from a menu, RENDER opens the Render window: the solids shaded, preset view
   buttons, drag the picture to orbit; it follows the drawing as you edit.
 

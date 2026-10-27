@@ -319,3 +319,22 @@ fn a_slice_that_fails_on_one_solid_changes_none() {
     assert_eq!(solids(&s).len(), 2);
     near(solid(&s, &near_box).mass_props().volume, 8.0, 1e-9);
 }
+
+#[test]
+fn printcheck_finds_what_needs_support() {
+    let mut s = Session::new();
+    let stem = handle(&run(&mut s, "box", json!({"corner": [-1, -1, 0], "opposite": [1, 1, 10]})));
+    let bar = handle(&run(&mut s, "box", json!({"corner": [-10, -1, 10], "opposite": [10, 1, 12]})));
+    run(&mut s, "union", json!({"handles": [stem, bar]}));
+    let r = run(&mut s, "printcheck", json!({"handles": [stem], "bed": [256, 256, 256]}));
+    assert_eq!(r["ok"], json!(false));
+    assert_eq!(r["solids"][0]["floating"].as_array().unwrap().len(), 2);
+    assert!(r["message"].as_str().unwrap().contains("mid air"), "{r}");
+    let plate = handle(&run(&mut s, "box", json!({"corner": [50, 0, 0], "opposite": [70, 20, 3]})));
+    let r = run(&mut s, "printcheck", json!({"handles": [plate], "bed": [256, 256, 256]}));
+    assert_eq!(r["ok"], json!(true), "{r}");
+    near(r["solids"][0]["bedContact"].as_f64().unwrap(), 400.0, 1e-9);
+    let r = run(&mut s, "printcheck", json!({"handles": [plate], "bed": [10, 10, 10]}));
+    assert!(r["message"].as_str().unwrap().contains("larger than the build volume"), "{r}");
+    assert!(s.execute("printcheck", &json!({"handles": [plate], "limit": 120})).is_err());
+}

@@ -20,6 +20,7 @@ pub mod boolean;
 mod bvh;
 mod merge;
 pub mod primitives;
+pub mod printability;
 mod stitch;
 mod triangulate;
 
